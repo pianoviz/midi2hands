@@ -1,1 +1,4 @@
 venv
+events
+vids/
+.DS_Store
