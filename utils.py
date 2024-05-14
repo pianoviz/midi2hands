@@ -3,8 +3,6 @@ import random
 import numpy as np
 from mido.midifiles.midifiles import MidiFile
 from pathlib import Path
-import torch
-from torch import nn
 
 from joblib import Memory
 
@@ -190,7 +188,7 @@ def generate_complex_random_name():
         "darwin",
         "curie",
     ]
-    numbers = range(00, 99)  # two digit numbers
+    numbers = range(10, 99)  # two digit numbers
 
     adjective = random.choice(adjectives)
     noun = random.choice(nouns)
