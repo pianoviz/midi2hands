@@ -1,4 +1,5 @@
 import logging
+import torch
 import random
 import numpy as np
 from mido.midifiles.midifiles import MidiFile
@@ -214,98 +215,65 @@ def k_fold_split(k):
 def train_loop(
     model, train_loader, val_loader, num_epochs, optimizer, criterion, device, logger
 ):
-    train_acc, train_loss, val_acc, val_loss, y_true, y_pred = [], [], [], [], [], []
+    # Store metrics for all epochs
+    metrics = {"train_loss": [], "train_acc": [], "val_loss": [], "val_acc": []}
 
+    # Function to process batches
+    def process_batch(windows, labels):
+        windows = windows.to(device)
+        labels = labels.unsqueeze(1).float().to(device)
+        outputs = model(windows)
+
+        loss = criterion(outputs, labels)
+
+        # Simplify handling of batches with single sample
+        labels = labels.squeeze()
+        outputs = outputs.squeeze()
+        if labels.ndim == 0:
+            labels = labels.unsqueeze(0)
+        if outputs.ndim == 0:
+            outputs = outputs.unsqueeze(0)
+
+        y_true = labels.cpu().numpy().astype(int).tolist()
+        y_pred = np.where(outputs.cpu().detach().numpy() > 0.5, 1, 0).tolist()
+
+        return loss, y_true, y_pred
+
+    # Loop over epochs
     for epoch in range(num_epochs):
         model.train()
-        epoch_losses = []
-        epoch_acc = []
-        y_true = []
-        y_pred = []
-        for i, (windows, labels) in enumerate(train_loader):
-            windows = windows.to(device)
-            labels = labels.unsqueeze(1).float().to(device)
-
-            outputs = model(windows)
-            loss = criterion(outputs, labels)
-
-            labels = labels.squeeze()
-            outputs = outputs.squeeze()
-            # edge case where the batch size is 1, might happen in the last batch
-            if labels.ndim == 0:
-                labels = labels.unsqueeze(0)
-            if outputs.ndim == 0:
-                outputs = outputs.unsqueeze(0)
-
-            y_t = list(labels.cpu().numpy().astype(int))
-
-            y_p = outputs.cpu().detach().numpy()
-            y_p = list(np.where(y_p > 0.5, 1, 0))
-
-            epoch_acc.append(accuracy(y_t, y_p))
-
-            y_true.extend(y_t)
-            y_pred.extend(y_p)
-
-            # Backward and optimize
+        train_losses, train_accs = [], []
+        for windows, labels in train_loader:
+            loss, y_t, y_p = process_batch(windows, labels)
+            train_losses.append(loss.item())
+            train_accs.append(accuracy(y_t, y_p))
             optimizer.zero_grad()
             loss.backward()
             optimizer.step()
 
-            epoch_losses.append(loss.item())
-            # log the epoch loss
+        # Logging training metrics
+        metrics["train_loss"].append(np.mean(train_losses))
+        metrics["train_acc"].append(np.mean(train_accs))
 
-        train_loss.append(np.mean(epoch_losses))
-        train_acc.append(np.mean(epoch_acc))
-
-        # validation
+        # Validation phase
         model.eval()
-        y_true = []
-        y_pred = []
-        epoch_losses = []
-        epoch_acc = []
-        for i, (windows, labels) in enumerate(val_loader):
-            windows = windows.to(device)
-            labels = labels.unsqueeze(1).float().to(device)
-            outputs = model(windows)
-            if (
-                windows.shape[0] != labels.shape[0]
-                or windows.shape[0] < 2
-                or labels.shape[0] < 2
-            ):
-                logger.error(
-                    f"windows shape: {windows.shape}, labels shape: {labels.shape}"
-                )
-            loss = criterion(outputs, labels)
-            labels = labels.squeeze()
-            outputs = outputs.squeeze()
-            # edge case where the batch size is 1, might happen in the last batch
-            if labels.ndim == 0:
-                labels = labels.unsqueeze(0)
-            if outputs.ndim == 0:
-                outputs = outputs.unsqueeze(0)
-            y_t = list(labels.cpu().numpy().astype(int))
+        val_losses, val_accs = [], []
+        with torch.no_grad():
+            for windows, labels in val_loader:
+                loss, y_t, y_p = process_batch(windows, labels)
+                val_losses.append(loss.item())
+                val_accs.append(accuracy(y_t, y_p))
 
-            y_p = outputs.cpu().detach().numpy()
-            y_p = list(np.where(y_p > 0.5, 1, 0))
+        # Logging validation metrics
+        metrics["val_loss"].append(np.mean(val_losses))
+        metrics["val_acc"].append(np.mean(val_accs))
 
-            y_true.extend(y_t)
-            y_pred.extend(y_p)
-            epoch_losses.append(loss.item())
-            epoch_acc.append(accuracy(y_t, y_p))
-
-        val_loss.append(np.mean(epoch_losses))
-        val_acc.append(np.mean(epoch_acc))
-
+        # Output log for each epoch
         logger.info(
-            f"Epoch {epoch+1:02}\ttrain_loss: {train_loss[-1]:.4f}\ttrain_acc: {train_acc[-1]:.4f}\tval_loss: {val_loss[-1]:.4f}\tval_acc: {val_acc[-1]:.4f}"
+            f"Epoch {epoch+1:02}\ttrain_loss: {metrics['train_loss'][-1]:.4f}\t"
+            f"train_acc: {metrics['train_acc'][-1]:.4f}\t"
+            f"val_loss: {metrics['val_loss'][-1]:.4f}\t"
+            f"val_acc: {metrics['val_acc'][-1]:.4f}"
         )
 
-    return {
-        "train_loss": train_loss,
-        "train_acc": train_acc,
-        "val_loss": val_loss,
-        "val_acc": val_acc,
-        "val_y_true": y_true,
-        "val_y_pred": y_pred,
-    }
+    return metrics
