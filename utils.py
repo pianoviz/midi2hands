@@ -281,7 +281,7 @@ def train_loop(
         val_acc.append(np.mean(epoch_acc))
 
         logger.info(
-            f"Epoch {epoch+1:02}\ttrain_loss: {train_loss[-1]}\ttrain_acc: {train_acc[-1]}\tval_loss: {val_loss[-1]}\tval_acc: {val_acc[-1]}"
+            f"Epoch {epoch+1:02}\ttrain_loss: {train_loss[-1]:.4f}\ttrain_acc: {train_acc[-1]:.4f}\tval_loss: {val_loss[-1]:.4f}\tval_acc: {val_acc[-1]:.4f}"
         )
 
     return {
