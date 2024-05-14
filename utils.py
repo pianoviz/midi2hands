@@ -2,6 +2,7 @@ import logging
 import random
 import numpy as np
 from mido.midifiles.midifiles import MidiFile
+from torch.utils.data import Dataset
 from pathlib import Path
 
 from joblib import Memory
@@ -10,7 +11,7 @@ memory = Memory(location="cache", verbose=0)
 
 
 class NoteEvent:
-    def __init__(self, note: int, velocity: int, start: int, hand: str = None):
+    def __init__(self, note: int, velocity: int, start: int, hand: str | None = None):
         self.note = note
         self.velocity = velocity
         self.start = start
@@ -21,7 +22,7 @@ class NoteEvent:
         self.end = end
 
 
-class MidiDataset:
+class MidiDataset(Dataset):
     def __init__(self, windows, labels):
         self.windows = windows
         self.labels = labels
@@ -101,9 +102,9 @@ def note_events_to_json(events, output_file_path: Path):
         json.dump(json_events, f)
 
 
-def preprocess_window(window: list[NoteEvent]):
+def preprocess_window(note_events: list[NoteEvent]):
     """Convert the list of notes to a numpy array, also normalize the start times"""
-    window = np.array([(n.note, n.start) for n in window], dtype=np.float32)
+    window = np.array([(n.note, n.start) for n in note_events], dtype=np.float32)
     # move the pitch values so that they correspond to the the 88 notes on a piano and normalize
     window[:, 0] = (window[:, 0] - 21) / 88
     window[:, 1] = window[:, 1] / window[-1, 1]
@@ -213,10 +214,7 @@ def k_fold_split(k):
 def train_loop(
     model, train_loader, val_loader, num_epochs, optimizer, criterion, device, logger
 ):
-    train_acc = []
-    train_loss = []
-    val_acc = []
-    val_loss = []
+    train_acc, train_loss, val_acc, val_loss, y_true, y_pred = [], [], [], [], [], []
 
     for epoch in range(num_epochs):
         model.train()
