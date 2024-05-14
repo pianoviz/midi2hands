@@ -6,3 +6,4 @@ cache/*
 *.json
 *.log
 lstm/*
+__pycache__/

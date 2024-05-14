@@ -111,7 +111,7 @@ def preprocess_window(note_events: list[NoteEvent]):
     return window
 
 
-def extract_windows_and_labels(events, window_size, step_size, bidirectional=False):
+def extract_windows_and_labels(events, window_size, step_size, bidirectional=True):
     windows = []
     labels = []
     for i in range(0, len(events) - window_size, step_size):
