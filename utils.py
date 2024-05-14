@@ -1,11 +1,15 @@
 import logging
+import random
 import numpy as np
 from tqdm import tqdm
 from mido.midifiles.midifiles import MidiFile
 from pathlib import Path
-from torch.utils.data import DataLoader, random_split
 import torch
 from torch import nn
+
+from joblib import Memory
+
+memory = Memory(location="cache", verbose=0)
 
 
 class NoteEvent:
@@ -103,7 +107,8 @@ def note_events_to_json(events, output_file_path: Path):
 def preprocess_window(window: list[NoteEvent]):
     """Convert the list of notes to a numpy array, also normalize the start times"""
     window = np.array([(n.note, n.start) for n in window], dtype=np.float32)
-    window[:, 0] = window[:, 0] / 128
+    # move the pitch values so that they correspond to the the 88 notes on a piano and normalize
+    window[:, 0] = (window[:, 0] - 21) / 88
     window[:, 1] = window[:, 1] / window[-1, 1]
     return window
 
@@ -125,11 +130,12 @@ def extract_windows_and_labels(events, window_size, step_size, bidirectional=Fal
     return windows, labels
 
 
+@memory.cache
 def extract_windows_from_files(paths, window_size, step_size):
     all_windows = []
     all_labels = []
     mp = MidiEventProcessor()
-    for path in tqdm(paths):
+    for path in paths:
         events = mp.extract_note_events(path)
         windows, labels = extract_windows_and_labels(
             events, window_size, step_size, bidirectional=True
@@ -158,6 +164,53 @@ def setup_logger(name: str, logdir: str, filename: str) -> logging.Logger:
     file_handler.setFormatter(formatter)
     logger.addHandler(file_handler)  # add the file handler
     return logger
+
+
+def generate_complex_random_name():
+    adjectives = [
+        "nostalgic",
+        "wonderful",
+        "mystic",
+        "quiet",
+        "vibrant",
+        "eager",
+        "frosty",
+        "peaceful",
+        "serene",
+        "ancient",
+    ]
+    nouns = [
+        "morse",
+        "turing",
+        "neumann",
+        "lovelace",
+        "hopper",
+        "tesla",
+        "einstein",
+        "bohr",
+        "darwin",
+        "curie",
+    ]
+    numbers = range(00, 99)  # two digit numbers
+
+    adjective = random.choice(adjectives)
+    noun = random.choice(nouns)
+    number = random.choice(numbers)
+    return f"{adjective}_{noun}_{number}"
+
+
+def k_fold_split(k):
+    paths = list(Path("data").rglob("*.mid"))
+    n = len(paths)
+    fold_size = n // k
+    folds = []
+    for i in range(k):
+        start = i * fold_size
+        end = (i + 1) * fold_size
+        val_fold = paths[start:end]
+        train_fold = paths[:start] + paths[end:]
+        folds.append((train_fold, val_fold))
+    return folds
 
 
 def train_loop(
@@ -214,9 +267,9 @@ def train_loop(
         for i, (windows, labels) in enumerate(val_loader):
             windows = windows.to(device)
             labels = labels.unsqueeze(1).float().to(device)
-            loss = criterion(outputs, labels)
-
             outputs = model(windows)
+
+            loss = criterion(outputs, labels)
             y_t = list(labels.squeeze().cpu().numpy().astype(int))
 
             y_p = outputs.squeeze().cpu().detach().numpy()
@@ -230,9 +283,15 @@ def train_loop(
         val_loss.append(np.mean(epoch_losses))
         val_acc.append(np.mean(epoch_losses))
 
+        logger.info(
+            f"Epoch {epoch+1}\ttrain_loss: {train_loss[-1]}\ttrain_acc: {train_acc[-1]}\tval_loss: {val_loss[-1]}\tval_acc: {val_acc[-1]}"
+        )
+
     return {
         "train_loss": train_loss,
         "train_acc": train_acc,
         "val_loss": val_loss,
         "val_acc": val_acc,
+        "val_y_true": y_true,
+        "val_y_pred": y_pred,
     }
