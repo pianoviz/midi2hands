@@ -226,6 +226,14 @@ def train_loop(
             windows = windows.to(device)
             labels = labels.unsqueeze(1).float().to(device)
 
+            if (
+                windows.shape[0] != labels.shape[0]
+                or windows.shape[0] < 2
+                or labels.shape[0] < 2
+            ):
+                logger.error(
+                    f"windows shape: {windows.shape}, labels shape: {labels.shape}"
+                )
             # Forward pass
             outputs = model(windows)
             loss = criterion(outputs, labels)
@@ -261,7 +269,14 @@ def train_loop(
             windows = windows.to(device)
             labels = labels.unsqueeze(1).float().to(device)
             outputs = model(windows)
-
+            if (
+                windows.shape[0] != labels.shape[0]
+                or windows.shape[0] < 2
+                or labels.shape[0] < 2
+            ):
+                logger.error(
+                    f"windows shape: {windows.shape}, labels shape: {labels.shape}"
+                )
             loss = criterion(outputs, labels)
             y_t = list(labels.squeeze().cpu().numpy().astype(int))
 
