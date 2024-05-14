@@ -1,6 +1,7 @@
 import utils as U
 import torch
 from torch import nn
+from tqdm import tqdm
 from torch.utils.data import DataLoader
 import json
 
@@ -56,17 +57,18 @@ def main():
     torch.manual_seed(h_params["seed"])
 
     # model
-    model = LSTMModel(**h_params).to(h_params["device"])
-
-    # Loss and optimizer
-    criterion = nn.BCELoss()
-    optimizer = torch.optim.Adam(model.parameters(), lr=0.001)
 
     # get the k-fold split
     k_fold_data = U.k_fold_split(10)
     all_results = {"h_params": h_params}
 
-    for i, fold in enumerate(k_fold_data):
+    for i, fold in tqdm(
+        enumerate(k_fold_data), total=len(k_fold_data), desc="Folds", unit="fold"
+    ):
+        model = LSTMModel(**h_params).to(h_params["device"])
+
+        criterion = nn.BCELoss()
+        optimizer = torch.optim.Adam(model.parameters(), lr=0.001)
         train_paths, val_paths = fold
 
         train_windows, train_labels = U.extract_windows_from_files(
@@ -100,6 +102,9 @@ def main():
             logger,
         )
         all_results[f"fold_{i+1}"] = results
+        logger.info(
+            "//////////////////////////////////////////////////////////////////"
+        )
 
     with open(f"lstm/{run_name}.json", "w") as f:
         json.dump(all_results, f, indent=4)

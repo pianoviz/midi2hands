@@ -1,7 +1,6 @@
 import logging
 import random
 import numpy as np
-from tqdm import tqdm
 from mido.midifiles.midifiles import MidiFile
 from pathlib import Path
 import torch
@@ -227,9 +226,7 @@ def train_loop(
         epoch_acc = []
         y_true = []
         y_pred = []
-        for i, (windows, labels) in tqdm(
-            enumerate(train_loader), total=len(train_loader), unit="batch"
-        ):
+        for i, (windows, labels) in enumerate(train_loader):
             windows = windows.to(device)
             labels = labels.unsqueeze(1).float().to(device)
 
@@ -281,10 +278,10 @@ def train_loop(
             epoch_acc.append(accuracy(y_t, y_p))
 
         val_loss.append(np.mean(epoch_losses))
-        val_acc.append(np.mean(epoch_losses))
+        val_acc.append(np.mean(epoch_acc))
 
         logger.info(
-            f"Epoch {epoch+1}\ttrain_loss: {train_loss[-1]}\ttrain_acc: {train_acc[-1]}\tval_loss: {val_loss[-1]}\tval_acc: {val_acc[-1]}"
+            f"Epoch {epoch+1:02}\ttrain_loss: {train_loss[-1]}\ttrain_acc: {train_acc[-1]}\tval_loss: {val_loss[-1]}\tval_acc: {val_acc[-1]}"
         )
 
     return {
