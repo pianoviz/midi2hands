@@ -226,21 +226,20 @@ def train_loop(
             windows = windows.to(device)
             labels = labels.unsqueeze(1).float().to(device)
 
-            if (
-                windows.shape[0] != labels.shape[0]
-                or windows.shape[0] < 2
-                or labels.shape[0] < 2
-            ):
-                logger.error(
-                    f"windows shape: {windows.shape}, labels shape: {labels.shape}"
-                )
-            # Forward pass
             outputs = model(windows)
             loss = criterion(outputs, labels)
 
-            y_t = list(labels.squeeze().cpu().numpy().astype(int))
+            labels = labels.squeeze()
+            outputs = outputs.squeeze()
+            # edge case where the batch size is 1, might happen in the last batch
+            if labels.ndim == 0:
+                labels = labels.unsqueeze(0)
+            if outputs.ndim == 0:
+                outputs = outputs.unsqueeze(0)
 
-            y_p = outputs.squeeze().cpu().detach().numpy()
+            y_t = list(labels.cpu().numpy().astype(int))
+
+            y_p = outputs.cpu().detach().numpy()
             y_p = list(np.where(y_p > 0.5, 1, 0))
 
             epoch_acc.append(accuracy(y_t, y_p))
@@ -278,9 +277,16 @@ def train_loop(
                     f"windows shape: {windows.shape}, labels shape: {labels.shape}"
                 )
             loss = criterion(outputs, labels)
-            y_t = list(labels.squeeze().cpu().numpy().astype(int))
+            labels = labels.squeeze()
+            outputs = outputs.squeeze()
+            # edge case where the batch size is 1, might happen in the last batch
+            if labels.ndim == 0:
+                labels = labels.unsqueeze(0)
+            if outputs.ndim == 0:
+                outputs = outputs.unsqueeze(0)
+            y_t = list(labels.cpu().numpy().astype(int))
 
-            y_p = outputs.squeeze().cpu().detach().numpy()
+            y_p = outputs.cpu().detach().numpy()
             y_p = list(np.where(y_p > 0.5, 1, 0))
 
             y_true.extend(y_t)
