@@ -126,7 +126,7 @@ def extract_windows_single(events, window_size, step_size) -> tuple[list, list]:
         window = events[i : i + window_size]
         windows.append(preprocess_window(window))
         n: NoteEvent = window[window_size // 2]
-        labels.append(0 if n.hand == "left" else 1)
+        labels.append(np.array([0 if n.hand == "left" else 1]))
     return windows, labels
 
 
@@ -136,11 +136,12 @@ def extract_windows_seq_2_seq(events, window_size, step_size) -> tuple[list, lis
     for i in range(0, len(events) - window_size, step_size):
         window = events[i : i + window_size]
         windows.append(preprocess_window(window))
-        labels.append(np.array([0 if n.hand == "left" else 1 for n in window]))
+        label = np.array([0 if n.hand == "left" else 1 for n in window]).reshape(-1, 1)
+        labels.append(label)
     return windows, labels
 
 
-@memory.cache
+# @memory.cache
 def extract_windows_from_files(
     paths, window_size, step_size, preprocess_func: ExtractFuncType
 ):
@@ -232,7 +233,7 @@ def train_loop(
     # Function to process batches
     def process_batch(windows, labels):
         windows = windows.to(device)
-        labels = labels.unsqueeze(1).float().to(device)
+        labels = labels.float().to(device)
         outputs = model(windows)
 
         loss = criterion(outputs, labels)
