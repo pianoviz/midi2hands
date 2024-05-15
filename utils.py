@@ -5,6 +5,7 @@ import numpy as np
 from mido.midifiles.midifiles import MidiFile
 from torch.utils.data import Dataset
 from pathlib import Path
+from typing import Callable, List, Tuple, Any
 
 from joblib import Memory
 
@@ -112,33 +113,43 @@ def preprocess_window(note_events: list[NoteEvent]):
     return window
 
 
-def extract_windows_and_labels(events, window_size, step_size, bidirectional=True):
-    windows = []
-    labels = []
+ExtractFuncType = Callable[
+    [List[NoteEvent], int, int],  # input
+    Tuple[List[np.ndarray], List[np.ndarray]],  # output
+]
+
+
+def extract_windows_single(events, window_size, step_size) -> tuple[list, list]:
+    """Extract windows and labels from a list of note events, single label per window"""
+    windows, labels = [], []
     for i in range(0, len(events) - window_size, step_size):
         window = events[i : i + window_size]
         windows.append(preprocess_window(window))
-        if bidirectional:
-            n: NoteEvent = window[window_size // 2]
-            label = 0 if n.hand == "left" else 1
-            labels.append(label)
-        else:
-            n: NoteEvent = window[-1]
-            label = 0 if n.hand == "left" else 1
-            labels.append(label)
+        n: NoteEvent = window[window_size // 2]
+        labels.append(0 if n.hand == "left" else 1)
+    return windows, labels
+
+
+def extract_windows_seq_2_seq(events, window_size, step_size) -> tuple[list, list]:
+    """Extract windows and labels from a list of note events, output per timestep"""
+    windows, labels = [], []
+    for i in range(0, len(events) - window_size, step_size):
+        window = events[i : i + window_size]
+        windows.append(preprocess_window(window))
+        labels.append(np.array([0 if n.hand == "left" else 1 for n in window]))
     return windows, labels
 
 
 @memory.cache
-def extract_windows_from_files(paths, window_size, step_size):
+def extract_windows_from_files(
+    paths, window_size, step_size, preprocess_func: ExtractFuncType
+):
     all_windows = []
     all_labels = []
     mp = MidiEventProcessor()
     for path in paths:
         events = mp.extract_note_events(path)
-        windows, labels = extract_windows_and_labels(
-            events, window_size, step_size, bidirectional=True
-        )
+        windows, labels = preprocess_func(events, window_size, step_size)
         all_windows.extend(windows)
         all_labels.extend(labels)
     return np.array(all_windows), np.array(all_labels)

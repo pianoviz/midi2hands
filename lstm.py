@@ -57,6 +57,7 @@ def main():
             if torch.cuda.is_available()
             else ("mps" if torch.backends.mps.is_available() else "cpu")
         ),
+        "preprocessing_func": U.extract_windows_single,
     }
 
     # set seed
@@ -78,10 +79,16 @@ def main():
         train_paths, val_paths = fold
 
         train_windows, train_labels = U.extract_windows_from_files(
-            train_paths, window_size=h_params["window_size"], step_size=1
+            train_paths,
+            window_size=h_params["window_size"],
+            step_size=1,
+            preprocess_func=h_params["preprocessing_func"],
         )
         val_windows, val_labels = U.extract_windows_from_files(
-            val_paths, window_size=h_params["window_size"], step_size=1
+            val_paths,
+            window_size=h_params["window_size"],
+            step_size=1,
+            preprocess_func=h_params["preprocessing_func"],
         )
 
         # create a data loader
