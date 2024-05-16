@@ -37,6 +37,7 @@ class LSTMModel(nn.Module):
 
 def main():
     run_name = U.generate_complex_random_name()
+    print(f"Run name: {run_name}")
     logger = U.setup_logger(__name__, "lstm", f"{run_name}.log")
 
     h_params = {
@@ -44,22 +45,24 @@ def main():
         "max_files": 20,
         "seed": 42,
         "batch_size": 64,
-        "num_epochs": 20,
+        "num_epochs": 2,
         "window_size": 30,
         "input_size": 3,
         "hidden_size": 16,
         "num_layers": 2,
         "num_classes": 1,
         "n_folds": 10,
-        "device": torch.device(
-            "cuda"
-            if torch.cuda.is_available()
-            else ("mps" if torch.backends.mps.is_available() else "cpu")
+        "device": str(
+            torch.device(
+                "cuda"
+                if torch.cuda.is_available()
+                else ("mps" if torch.backends.mps.is_available() else "cpu")
+            )
         ),
         "preprocessing_func": U.extract_windows_single,
         "use_kfold": False,
     }
-    logger.info(f"Running with parameters:")
+    logger.info("Running with parameters:")
     U.log_parameters(h_params, logger)
     logger.info("========================================\n")
 
@@ -71,7 +74,7 @@ def main():
     #     "batch_size": [32, 64, 128],
     # }
     param_grid = {
-        "window_size": [5, 10, 20, 30],
+        "window_size": [5, 10],
     }
 
     all_results: dict[str, float | dict | list | None] = {"h_params": h_params}
@@ -86,7 +89,7 @@ def main():
 
     for params in itertools.product(*param_grid.values()):
         param_dict = dict(zip(param_grid.keys(), params))
-        logger.info(f"\nTraining with params:")
+        logger.info("\nTraining with params:")
         U.log_parameters(param_dict, logger)
         h_params.update(param_dict)
 
@@ -134,7 +137,7 @@ def main():
                 h_params["device"],
                 logger,
             )
-            fold_results.append(results["val_loss"])
+            fold_results.append(results["val_loss"][-1])
 
         avg_val_loss = sum(fold_results) / len(fold_results)
         if avg_val_loss < best_val_loss:
@@ -142,7 +145,7 @@ def main():
             best_val_loss = avg_val_loss
             best_h_params = param_dict
 
-        all_results[f"params_{params}"] = fold_results
+        # all_results[f"params_{params}"] = fold_results
 
         logger.info(f"Validation loss for params {params}: {avg_val_loss}")
 
@@ -150,6 +153,11 @@ def main():
     all_results["best_val_loss"] = best_val_loss
 
     with open(f"lstm/{run_name}.json", "w") as f:
+        all_results["h_params"]["preprocessing_func"] = h_params[
+            "preprocessing_func"
+        ].__name__
+
+        print(all_results)
         json.dump(all_results, f, indent=4)
 
 
