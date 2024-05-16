@@ -106,10 +106,11 @@ def note_events_to_json(events, output_file_path: Path):
 
 def preprocess_window(note_events: list[NoteEvent]):
     """Convert the list of notes to a numpy array, also normalize the start times"""
-    window = np.array([(n.note, n.start) for n in note_events], dtype=np.float32)
+    window = np.array([(n.note, n.start, n.end) for n in note_events], dtype=np.float32)
     # move the pitch values so that they correspond to the the 88 notes on a piano and normalize
     window[:, 0] = (window[:, 0] - 21) / 88
-    window[:, 1] = window[:, 1] / window[-1, 1]
+    # normalize the start and end times by the last end time
+    window[:, 1:] = window[:, 1:] / window[-1, 2]
     return window
 
 

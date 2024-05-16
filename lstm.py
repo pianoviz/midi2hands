@@ -48,7 +48,7 @@ def main():
         "batch_size": 64,
         "num_epochs": 20,
         "window_size": 30,
-        "input_size": 2,
+        "input_size": 3,
         "hidden_size": 16,
         "num_layers": 2,
         "num_classes": 1,
@@ -118,6 +118,7 @@ def main():
         logger.info(
             "//////////////////////////////////////////////////////////////////"
         )
+        break
 
     with open(f"lstm/{run_name}.json", "w") as f:
         json.dump(all_results, f, indent=4)
