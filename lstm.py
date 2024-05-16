@@ -65,12 +65,14 @@ def main():
 
     torch.manual_seed(h_params["seed"])
 
+    # param_grid = {
+    #     "hidden_size": [32, 64],
+    #     "num_layers": [1, 2, 3],
+    #     "batch_size": [32, 64, 128],
+    # }
     param_grid = {
-        "hidden_size": [16, 32, 64],
-        "num_layers": [1, 2, 3],
-        "batch_size": [32, 64, 128],
+        "window_size": [5, 10, 20, 30],
     }
-    param_grid = {}
 
     all_results: dict[str, float | dict | list | None] = {"h_params": h_params}
 
