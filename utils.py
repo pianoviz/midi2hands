@@ -104,6 +104,11 @@ def note_events_to_json(events, output_file_path: Path):
         json.dump(json_events, f)
 
 
+def log_parameters(params: dict, logger):
+    for key, value in params.items():
+        logger.info(f"{key}: {value}")
+
+
 def preprocess_window(note_events: list[NoteEvent]):
     """Convert the list of notes to a numpy array, also normalize the start times"""
     window = np.array([(n.note, n.start, n.end) for n in note_events], dtype=np.float32)
@@ -211,8 +216,10 @@ def generate_complex_random_name():
     return f"{adjective}_{noun}_{number}"
 
 
-def k_fold_split(k):
+def k_fold_split(k, max_files=None):
     paths = list(Path("data").rglob("*.mid"))
+    if max_files:
+        paths = paths[: max_files + 1]
     n = len(paths)
     fold_size = n // k
     folds = []
