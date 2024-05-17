@@ -1,3 +1,4 @@
+from joblib.numpy_pickle import Path
 import utils as U
 import torch
 from torch import nn
@@ -5,11 +6,12 @@ from tqdm import tqdm
 from torch.utils.data import DataLoader
 import json
 import itertools
+import os
 
 
 class LSTMModel(nn.Module):
     def __init__(
-        self, input_size, hidden_size, num_layers, num_classes, device, **kwargs
+        self, input_size, hidden_size, num_layers, num_classes, device, **extra_params
     ):
         super(LSTMModel, self).__init__()
         self.hidden_size = hidden_size
@@ -37,12 +39,16 @@ class LSTMModel(nn.Module):
 
 def main():
     run_name = U.generate_complex_random_name()
+    run_path = Path(os.getcwd()) / "lstm" / Path(run_name)
+    if not run_path.exists():
+        run_path.mkdir(parents=True)
+
     print(f"Run name: {run_name}")
-    logger = U.setup_logger(__name__, "lstm", f"{run_name}.log")
+    logger = U.setup_logger(__name__, str(run_path), f"log")
 
     h_params = {
         "run_name": run_name,
-        "max_files": 20,
+        "max_files": None,
         "seed": 42,
         "batch_size": 64,
         "num_epochs": 2,
@@ -52,6 +58,8 @@ def main():
         "num_layers": 2,
         "num_classes": 1,
         "n_folds": 10,
+        "use_early_stopping": True,
+        "patience": 3,
         "device": str(
             torch.device(
                 "cuda"
@@ -59,25 +67,29 @@ def main():
                 else ("mps" if torch.backends.mps.is_available() else "cpu")
             )
         ),
-        "preprocessing_func": U.extract_windows_single,
+        "preprocessing_func": "U.extract_windows_single",
         "use_kfold": False,
     }
-    logger.info("Running with parameters:")
+    logger.info("Running with fixed parameters:")
     U.log_parameters(h_params, logger)
-    logger.info("========================================\n")
+    logger.info("===========================================================\n\n")
 
     torch.manual_seed(h_params["seed"])
 
-    # param_grid = {
-    #     "hidden_size": [32, 64],
-    #     "num_layers": [1, 2, 3],
-    #     "batch_size": [32, 64, 128],
-    # }
     param_grid = {
-        "window_size": [5, 10],
+        "hidden_size": [32, 64, 128],
+        "num_layers": [1, 3],
+        "batch_size": [32, 64, 128],
+        "window_size": [16, 32, 64],
     }
+    combinations = list(itertools.product(*param_grid.values()))
+    print(f"number of combinations: {len(combinations)}")
+    # param_grid = {
+    #     "window_size": [5, 10],
+    # }
 
     all_results: dict[str, float | dict | list | None] = {"h_params": h_params}
+    all_results["grid_params"] = []
 
     k_fold_data = U.k_fold_split(h_params["n_folds"], max_files=h_params["max_files"])
 
@@ -85,19 +97,23 @@ def main():
         k_fold_data = [k_fold_data[0]]
 
     best_val_loss = float("inf")
-    best_h_params = None
 
-    for params in itertools.product(*param_grid.values()):
+    model = None
+    results = {}
+    for params in tqdm(
+        combinations,
+        total=len(combinations),
+        desc="Grid search",
+        unit="combination",
+    ):
         param_dict = dict(zip(param_grid.keys(), params))
-        logger.info("\nTraining with params:")
+        logger.info("Training with params:")
         U.log_parameters(param_dict, logger)
         h_params.update(param_dict)
 
         fold_results = []
 
-        for i, fold in tqdm(
-            enumerate(k_fold_data), total=len(k_fold_data), desc="Folds", unit="fold"
-        ):
+        for i, fold in enumerate(k_fold_data):
             model = LSTMModel(**h_params).to(h_params["device"])
 
             criterion = nn.BCELoss()
@@ -108,13 +124,13 @@ def main():
                 train_paths,
                 window_size=h_params["window_size"],
                 step_size=1,
-                preprocess_func=h_params["preprocessing_func"],
+                preprocess_func=eval(h_params["preprocessing_func"]),
             )
             val_windows, val_labels = U.extract_windows_from_files(
                 val_paths,
                 window_size=h_params["window_size"],
                 step_size=1,
-                preprocess_func=h_params["preprocessing_func"],
+                preprocess_func=eval(h_params["preprocessing_func"]),
             )
 
             train_dataset = U.MidiDataset(train_windows, train_labels)
@@ -131,32 +147,48 @@ def main():
                 model,
                 train_loader,
                 val_loader,
-                h_params["num_epochs"],
                 optimizer,
                 criterion,
-                h_params["device"],
                 logger,
+                **h_params,
             )
-            fold_results.append(results["val_loss"][-1])
+            fold_results.append(results["val_loss"][-1])  # last epoch val
+            # do next fold
+
+        # save results for this set of parameters
+
+        # vi vill spara kombinationen av grid params och basta loss/acc
+
+        if not h_params["use_kfold"]:
+            all_results["grid_params"].append(
+                {
+                    "params": param_dict,
+                    "results": {
+                        "val_loss": results["val_loss"],
+                        "val_acc": results["val_acc"],
+                    },
+                }
+            )
 
         avg_val_loss = sum(fold_results) / len(fold_results)
         if avg_val_loss < best_val_loss:
             logger.info(f"New best validation loss: {avg_val_loss}")
             best_val_loss = avg_val_loss
-            best_h_params = param_dict
+            # save model checkpoint
+            if model:
+                torch.save(model.state_dict(), Path(run_path / "best_model.pth"))
+            all_results["val_loss"] = results["val_loss"]
+            all_results["val_acc"] = results["val_acc"]
+            all_results["train_loss"] = results["train_loss"]
+            all_results["train_acc"] = results["train_acc"]
+            all_results["h_params"] = h_params
+            all_results["best_val_loss"] = best_val_loss
 
         # all_results[f"params_{params}"] = fold_results
 
         logger.info(f"Validation loss for params {params}: {avg_val_loss}")
 
-    all_results["best_h_params"] = best_h_params
-    all_results["best_val_loss"] = best_val_loss
-
-    with open(f"lstm/{run_name}.json", "w") as f:
-        all_results["h_params"]["preprocessing_func"] = h_params[
-            "preprocessing_func"
-        ].__name__
-
+    with open(run_path / "results.json", "w") as f:
         print(all_results)
         json.dump(all_results, f, indent=4)
 

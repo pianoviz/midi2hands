@@ -233,10 +233,23 @@ def k_fold_split(k, max_files=None):
 
 
 def train_loop(
-    model, train_loader, val_loader, num_epochs, optimizer, criterion, device, logger
+    model,
+    train_loader,
+    val_loader,
+    optimizer,
+    criterion,
+    logger,
+    use_early_stopping,
+    patience,
+    device,
+    num_epochs,
+    **extra_params,
 ):
     # Store metrics for all epochs
     metrics = {"train_loss": [], "train_acc": [], "val_loss": [], "val_acc": []}
+
+    if use_early_stopping:
+        num_epochs = 500
 
     # Function to process batches
     def process_batch(windows, labels):
@@ -259,7 +272,9 @@ def train_loop(
 
         return loss, y_true, y_pred
 
-    # Loop over epochs
+    best_val_loss = np.inf
+    epochs_without_improvement = 0
+
     for epoch in range(num_epochs):
         model.train()
         train_losses, train_accs = [], []
@@ -296,4 +311,16 @@ def train_loop(
             f"val_acc: {metrics['val_acc'][-1]:.4f}"
         )
 
+        # Early stopping
+        if use_early_stopping:
+            if metrics["val_loss"][-1] < best_val_loss:
+                best_val_loss = metrics["val_loss"][-1]
+                epochs_without_improvement = 0
+            else:
+                epochs_without_improvement += 1
+                if epochs_without_improvement >= patience:
+                    logger.info(
+                        f"Early stopping after {epoch+1} epochs without improvement"
+                    )
+                    break
     return metrics
