@@ -160,11 +160,10 @@ def main():
             model,
             train_loader,
             val_loader,
-            h_params["num_epochs"],
             optimizer,
             criterion,
-            h_params["device"],
             logger,
+            **h_params,
         )
         all_results[f"fold_{i+1}"] = results
         logger.info(

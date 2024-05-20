@@ -6,8 +6,11 @@ from mido.midifiles.midifiles import MidiFile
 from torch.utils.data import Dataset
 from pathlib import Path
 from typing import Callable, List, Tuple, Any
-
+import shutil
 from joblib import Memory
+
+torch.manual_seed(0)
+
 
 memory = Memory(location="cache", verbose=0)
 
@@ -109,6 +112,45 @@ def log_parameters(params: dict, logger):
         logger.info(f"{key}: {value}")
 
 
+def get_device() -> str:
+    return str(
+        torch.device(
+            "cuda"
+            if torch.cuda.is_available()
+            else ("mps" if torch.backends.mps.is_available() else "cpu")
+        )
+    )
+
+
+def random_split(paths, ratios):
+    random.seed(0)
+    random.shuffle(paths)
+    total = len(paths)
+    ratios = [int(r * total) for r in ratios]
+    return paths[: ratios[0]], paths[ratios[0] :]
+
+
+def split_data():
+    paths = list(Path("data").rglob("*.mid"))
+    print(f"Found {len(paths)} midi files")
+
+    # split paths into train and validation
+    train_paths, test_paths = random_split(paths, [0.9, 0.1])
+    train_paths = list(train_paths)
+
+    # creae directories
+    Path("data/train").mkdir(parents=True, exist_ok=True)
+    Path("data/test").mkdir(parents=True, exist_ok=True)
+    for i, path in enumerate(train_paths):
+        new_path = Path(f"data/train/{i:03}-{path.stem}.mid")
+        # copy the file to the new path
+        shutil.copy(path, new_path)
+    for i, path in enumerate(test_paths):
+        new_path = Path(f"data/test/{i:03}-{path.stem}.mid")
+        # copy the file to the new path
+        shutil.copy(path, new_path)
+
+
 def preprocess_window(note_events: list[NoteEvent]):
     """Convert the list of notes to a numpy array, also normalize the start times"""
     window = np.array([(n.note, n.start, n.end) for n in note_events], dtype=np.float32)
@@ -144,6 +186,19 @@ def extract_windows_seq_2_seq(events, window_size, step_size) -> tuple[list, lis
         windows.append(preprocess_window(window))
         label = np.array([0 if n.hand == "left" else 1 for n in window]).reshape(-1, 1)
         labels.append(label)
+    return windows, labels
+
+
+def extract_windows_generative(events, window_size, step_size) -> tuple[list, list]:
+    """Extract windows and labels from a list of note events
+    Include the label in the
+    """
+    windows, labels = [], []
+    for i in range(0, len(events) - window_size, step_size):
+        window = events[i : i + window_size]
+        windows.append(preprocess_window(window))
+        n: NoteEvent = window[window_size // 2]
+        labels.append(np.array([0 if n.hand == "left" else 1]))
     return windows, labels
 
 
@@ -232,6 +287,27 @@ def k_fold_split(k, max_files=None):
     return folds
 
 
+def process_batch(windows, labels, model, criterion, device):
+    windows = windows.to(device)
+    labels = labels.float().to(device)
+    outputs = model(windows)
+
+    loss = criterion(outputs, labels)
+
+    # Simplify handling of batches with single sample
+    labels = labels.squeeze()
+    outputs = outputs.squeeze()
+    if labels.ndim == 0:
+        labels = labels.unsqueeze(0)
+    if outputs.ndim == 0:
+        outputs = outputs.unsqueeze(0)
+
+    y_true = labels.cpu().numpy().astype(int).tolist()
+    y_pred = np.where(outputs.cpu().detach().numpy() > 0.5, 1, 0).tolist()
+
+    return loss, y_true, y_pred
+
+
 def train_loop(
     model,
     train_loader,
@@ -252,25 +328,6 @@ def train_loop(
         num_epochs = 500
 
     # Function to process batches
-    def process_batch(windows, labels):
-        windows = windows.to(device)
-        labels = labels.float().to(device)
-        outputs = model(windows)
-
-        loss = criterion(outputs, labels)
-
-        # Simplify handling of batches with single sample
-        labels = labels.squeeze()
-        outputs = outputs.squeeze()
-        if labels.ndim == 0:
-            labels = labels.unsqueeze(0)
-        if outputs.ndim == 0:
-            outputs = outputs.unsqueeze(0)
-
-        y_true = labels.cpu().numpy().astype(int).tolist()
-        y_pred = np.where(outputs.cpu().detach().numpy() > 0.5, 1, 0).tolist()
-
-        return loss, y_true, y_pred
 
     best_val_loss = np.inf
     epochs_without_improvement = 0
@@ -279,7 +336,7 @@ def train_loop(
         model.train()
         train_losses, train_accs = [], []
         for windows, labels in train_loader:
-            loss, y_t, y_p = process_batch(windows, labels)
+            loss, y_t, y_p = process_batch(windows, labels, model, criterion, device)
             train_losses.append(loss.item())
             train_accs.append(accuracy(y_t, y_p))
             optimizer.zero_grad()
@@ -295,7 +352,9 @@ def train_loop(
         val_losses, val_accs = [], []
         with torch.no_grad():
             for windows, labels in val_loader:
-                loss, y_t, y_p = process_batch(windows, labels)
+                loss, y_t, y_p = process_batch(
+                    windows, labels, model, criterion, device
+                )
                 val_losses.append(loss.item())
                 val_accs.append(accuracy(y_t, y_p))
 
@@ -324,3 +383,7 @@ def train_loop(
                     )
                     break
     return metrics
+
+
+if __name__ == "__main__":
+    split_data()
