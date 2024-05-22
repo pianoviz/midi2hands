@@ -53,7 +53,7 @@ def accuracy_loss_plot(
 
     plt.show()
     # save fig
-    plt.savefig(save_dir / filename)
+    fig.savefig(save_dir / filename)
 
 
 def evaluate_model(model, test_loader, device):
