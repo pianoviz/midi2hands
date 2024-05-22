@@ -162,7 +162,7 @@ def pad_events(events: list[NoteEvent], window_size: int) -> list[NoteEvent]:
     return events
 
 
-def convert_hand_to_number(hand: str):
+def convert_hand_to_number(hand: str | None):
     return 0 if hand == "left" else (1 if hand == "right" else -1)
 
 
@@ -278,8 +278,11 @@ def generative_accuracy(paths, model, window_size, device):
             assert len(window_events) == window_size
             # 2. preprocess the window
             preprocessed_window = preprocess_window_generative(window_events)
-
-            # 3. get the label
+            # 3. add a slice of y_pred to the last column, pad with -1
+            prev_out = y_pred[-h:]
+            prev_out = prev_out + [-1] * (h - len(prev_out))
+            preprocessed_window[:h, -1] = prev_out
+            # 4. get the label
             label = padded_events[i].hand
             label = convert_hand_to_number(label)
             y_true.append(label)
