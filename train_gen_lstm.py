@@ -26,7 +26,7 @@ def main():
         "batch_size": 64,
         "num_epochs": 2,
         "window_size": 30,
-        "input_size": 3,
+        "input_size": 4,
         "hidden_size": 16,
         "num_layers": 2,
         "num_classes": 1,
@@ -40,7 +40,7 @@ def main():
                 else ("mps" if torch.backends.mps.is_available() else "cpu")
             )
         ),
-        "preprocessing_func": "U.extract_windows_single",
+        "preprocessing_func": "U.extract_windows_generative",
         "use_kfold": False,
     }
     logger.info("Running with fixed parameters:")
@@ -50,8 +50,6 @@ def main():
     torch.manual_seed(h_params["seed"])
 
     k_fold_data = U.k_fold_split(h_params["n_folds"], max_files=h_params["max_files"])
-
-    best_val_loss = float("inf")
 
     model = None
     all_results = {}
@@ -104,7 +102,7 @@ def main():
         all_results[f"fold_{i}"] = results
         # running generative_accuracy and appending to results
         generative_accuracy = U.generative_accuracy(
-            model, val_paths, h_params["window_size"], h_params["device"]
+            val_paths, model, h_params["window_size"], h_params["device"]
         )
         results["generative_accuracy"] = generative_accuracy
 
