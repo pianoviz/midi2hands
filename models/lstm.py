@@ -23,6 +23,7 @@ class LSTMModel(nn.Module):
         c0 = torch.zeros(self.num_layers * 2, x.size(0), self.hidden_size).to(
             self.device
         )
+        # print(x.shape, h0.shape, c0.shape)
         out, _ = self.lstm(x, (h0, c0))
         out = self.fc(out[:, out.size(1) // 2, :])
         out = self.fc2(out)
