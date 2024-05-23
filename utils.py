@@ -279,9 +279,10 @@ def generative_accuracy(paths, model, window_size, device):
             # 2. preprocess the window
             preprocessed_window = preprocess_window_generative(window_events)
             # 3. add a slice of y_pred to the last column, pad with -1
+            preprocessed_window[:, -1] = -1  # we don't know the output yet
             prev_out = y_pred[-h:]
-            prev_out = prev_out + [-1] * (h - len(prev_out))
-            preprocessed_window[:h, -1] = prev_out
+            preprocessed_window[: len(prev_out), -1] = prev_out
+
             # 4. get the label
             label = padded_events[i].hand
             label = convert_hand_to_number(label)

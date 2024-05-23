@@ -104,6 +104,7 @@ def main():
         generative_accuracy = U.generative_accuracy(
             val_paths, model, h_params["window_size"], h_params["device"]
         )
+        logger.info(f"Generative accuracy: {generative_accuracy}")
         results["generative_accuracy"] = generative_accuracy
 
         if not h_params["use_kfold"]:
@@ -112,6 +113,10 @@ def main():
     with open(run_path / "results.json", "w") as f:
         print(all_results)
         json.dump(all_results, f, indent=4)
+
+    # save model
+    if model:
+        torch.save(model.state_dict(), run_path / "model.pth")
 
 
 if __name__ == "__main__":
