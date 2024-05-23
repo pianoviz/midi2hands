@@ -267,10 +267,13 @@ def generative_accuracy(paths, model, window_size, device):
     y_true = []
     y_pred = []
     for path in paths:
+        print(f"Processing {path}")
         events = mp.extract_note_events(path)
         padded_events = pad_events(events.copy(), window_size)
         # print("padded events", len(padded_events))
         # print("events", len(events))
+        y_pred_temp = []
+        y_true_temp = []
         h = window_size // 2
         for i in range(h, len(events) + h, 1):
             # 1. extract the window
@@ -280,26 +283,31 @@ def generative_accuracy(paths, model, window_size, device):
             preprocessed_window = preprocess_window_generative(window_events)
             # 3. add a slice of y_pred to the last column, pad with -1
             preprocessed_window[:, -1] = -1  # we don't know the output yet
-            prev_out = y_pred[-h:]
+            prev_out = y_pred_temp[-h:]
             preprocessed_window[: len(prev_out), -1] = prev_out
 
             # 4. get the label
             label = padded_events[i].hand
             label = convert_hand_to_number(label)
-            y_true.append(label)
+            y_true_temp.append(label)
 
             tensor_window = (
                 torch.tensor(preprocessed_window).float().to(device).unsqueeze(0)
             )
 
             output = model(tensor_window)
-            output = torch.sigmoid(output).squeeze().cpu().detach().numpy()
+            output = output.squeeze().cpu().detach().numpy()
             # print(output)
             output = 0 if output < 0.5 else 1
-            y_pred.append(output)
-        # print("outputs", len(y_pred))
-        # print("events", len(events))
-        # assert len(y_pred) == len(events)
+            y_pred_temp.append(output)
+        y_pred.extend(y_pred_temp)
+        y_true.extend(y_true_temp)
+
+        # song accuracy
+        acc_temp = np.sum(np.array(y_true_temp) == np.array(y_pred_temp)) / len(
+            y_true_temp
+        )
+        print(f"Song accuracy: {acc_temp}")
     return np.sum(np.array(y_true) == np.array(y_pred)) / len(y_true)
 
 

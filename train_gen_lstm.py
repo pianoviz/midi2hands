@@ -17,7 +17,7 @@ def main():
         run_path.mkdir(parents=True)
 
     print(f"Run name: {run_name}")
-    logger = U.setup_logger(__name__, str(run_path), f"log")
+    logger = U.setup_logger(__name__, str(run_path), "log")
 
     h_params = {
         "run_name": run_name,
