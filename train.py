@@ -21,7 +21,7 @@ def lstm_model(h_params):
 
 def main():
     run_name = U.generate_complex_random_name()
-    run_path = Path(os.getcwd()) / "lstm" / Path(run_name)
+    run_path = Path(os.getcwd()) / "results" / Path(run_name)
     if not run_path.exists():
         run_path.mkdir(parents=True)
 
