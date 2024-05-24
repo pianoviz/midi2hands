@@ -1,4 +1,5 @@
 from models.lstm import LSTMModel
+from typing import Callable
 from sklearn.metrics import classification_report
 import matplotlib.pyplot as plt
 import torch
@@ -183,23 +184,8 @@ def to_onnx(model_dir, filename, window_size, input_size, **h_params):
     torch.onnx.export(model, dummy_input, model_dir / filename)
 
 
-if __name__ == "__main__":
-    parser = argparse.ArgumentParser()
-    parser.add_argument("--model_dir", type=str, required=True)
-
-    args = parser.parse_args()
-
-    model_dir = Path(args.model_dir)
-    # read the results.json file
-
-    with open(model_dir / "results.json", "r") as f:
-        results = json.load(f)
-
-    h_params = results["h_params"]
-    device = U.get_device()
-
+def get_test_acc(model, h_params):
     test_paths = get_test_files()
-
     test_windows, train_labels = U.extract_windows_from_files(
         test_paths,
         window_size=h_params["window_size"],
@@ -211,19 +197,80 @@ if __name__ == "__main__":
     test_loader = DataLoader(
         test_dataset, batch_size=h_params["batch_size"], shuffle=False
     )
+    y_true, y_pred = evaluate_model(model, test_loader, device)
+    print(classification_report(y_true, y_pred))
 
-    # model = get_model(model_dir, h_params, device)
-    # y_true, y_pred = evaluate_model(model, test_loader, device)
-    # print(classification_report(y_true, y_pred))
+
+def generate_videos(
+    mid_path: Path, model_dir: Path, model, device, inference_func: Callable, **h_params
+):
+    """
+    Saves a rendered video of the predicted events, the original events and video of error events marked red
+    """
+    import dotenv
+    import os
+
+    out_dir = model_dir / str(mid_path.name)
+    if not out_dir.exists():
+        out_dir.mkdir()
+
+    events, y_true, y_pred = eval(h_params["inference_func"])(
+        mid_path, model, h_params["window_size"], device
+    )
+
+    dotenv.load_dotenv()
+    midi2vid_program = os.getenv("MIDI2VID_PROGRAM")
+    # the binary is yet
+    # get the test data
+
+    # 1. Create the predicted events
+    predicted_events = events.copy()
+    for i in range(len(predicted_events)):
+        predicted_events[i].hand = "left" if y_pred[i] == 0 else 1
+    U.note_events_to_json(events, output_file_path=out_dir / "predicted.json")
+
+    # 2. Create a combined version where a wrong assignment is marked with None
+    merged_events = events.copy()
+    for i in range(len(merged_events)):
+        if y_pred[i] != y_true[i]:
+            merged_events[i].hand = None
+        else:
+            merged_events[i].hand = "left" if y_true[i] == 0 else 1
+    U.note_events_to_json(events, output_file_path=out_dir / "merged.json")
+
+    os.system(
+        f"{midi2vid_program} --mid_path={str(mid_path.absolute)} --out_path={str(out_dir.absolute)}/original.mp4"
+    )
+    os.system(
+        f"{midi2vid_program} --mid_path={str(mid_path.absolute)} --out_path={str(out_dir.absolute)}/predicted.mp4 --events_path={str(out_dir.absolute)}/predicted.json"
+    )
+    os.system(
+        f"{midi2vid_program} --mid_path={str(mid_path.absolute)} --out_path={str(out_dir.absolute)}/merged.mp4 --events_path={str(out_dir.absolute)}/merged.json"
+    )
+
+
+if __name__ == "__main__":
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--model_dir", type=str, required=True)
+    args = parser.parse_args()
+
+    # results and h_params
+    model_dir = Path(args.model_dir)
+    with open(model_dir / "results.json", "r") as f:
+        results = json.load(f)
+    h_params = results["h_params"]
+    device = U.get_device()
+
+    model = get_model(model_dir, h_params, device)
 
     # to_onnx(model_dir, "model.onnx", **h_params)
 
     # analysis of the training process with the results.json file
     # get the best model training results
-    grid_params: list[dict[str, dict[str, int]]] = results["grid_params"]
+    # grid_params: list[dict[str, dict[str, int]]] = results["grid_params"]
     # grid_search_scatter(grid_params)
 
-    plot_hparams2(grid_params)
+    # plot_hparams2(grid_params)
 
     # plot the accuracy and loss of the best model
     # accuracy_loss_plot(

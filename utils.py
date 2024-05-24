@@ -166,6 +166,21 @@ def convert_hand_to_number(hand: str | None):
     return 0 if hand == "left" else (1 if hand == "right" else -1)
 
 
+def preprocess_window_discriminative(note_events: list[NoteEvent]):
+    """Convert the list of notes to a numpy array, also normalize the start times"""
+
+    def convert(n: NoteEvent):
+        return (n.note, n.start, n.end)
+
+    window = np.array([convert(n) for n in note_events], dtype=np.float32)
+    non_pad_indices = np.where(window[:, 0] != -1)[0]
+    window[non_pad_indices, 1:3] = window[non_pad_indices, 1:3] / np.max(
+        window[non_pad_indices, 2]
+    )
+    window[non_pad_indices, 0] = (window[non_pad_indices, 0] - 21) / 88
+    return window
+
+
 def preprocess_window_generative(note_events: list[NoteEvent]):
     """Convert the list of notes to a numpy array, also normalize the start times"""
 
@@ -173,28 +188,12 @@ def preprocess_window_generative(note_events: list[NoteEvent]):
         return (n.note, n.start, n.end, convert_hand_to_number(n.hand))
 
     window = np.array([convert(n) for n in note_events], dtype=np.float32)
-    # window now has size (window_size, 4)
-    # select indicies where the pitch (note) is not -1
     non_pad_indices = np.where(window[:, 0] != -1)[0]
-
-    # normalize the start and end times by the maximum value in column 2 (end time)
     window[non_pad_indices, 1:3] = window[non_pad_indices, 1:3] / np.max(
         window[non_pad_indices, 2]
     )
-
-    # normalize the pitch values so that they correspond to the the 88 notes on a piano
     window[non_pad_indices, 0] = (window[non_pad_indices, 0] - 21) / 88
 
-    return window
-
-
-def preprocess_window_seq_2_seq(note_events: list[NoteEvent]):
-    """Convert the list of notes to a numpy array, also normalize the start times"""
-    window = np.array([(n.note, n.start, n.end) for n in note_events], dtype=np.float32)
-    # move the pitch values so that they correspond to the the 88 notes on a piano and normalize
-    window[:, 0] = (window[:, 0] - 21) / 88
-    # normalize the start and end times by the last end time
-    window[:, 1:] = window[:, 1:] / window[-1, 2]
     return window
 
 
@@ -204,44 +203,37 @@ ExtractFuncType = Callable[
 ]
 
 
-def extract_windows_single(events, window_size, step_size) -> tuple[list, list]:
-    """Extract windows and labels from a list of note events, single label per window"""
-    windows, labels = [], []
-    for i in range(0, len(events) - window_size, step_size):
-        window = events[i : i + window_size]
-        windows.append(preprocess_window_seq_2_seq(window))
-        n: NoteEvent = window[window_size // 2]
-        labels.append(np.array([0 if n.hand == "left" else 1]))
-    return windows, labels
-
-
-def extract_windows_seq_2_seq(events, window_size, step_size) -> tuple[list, list]:
-    """Extract windows and labels from a list of note events, output per timestep"""
-    windows, labels = [], []
-    for i in range(0, len(events) - window_size, step_size):
-        window = events[i : i + window_size]
-        windows.append(preprocess_window_seq_2_seq(window))
-        label = np.array([0 if n.hand == "left" else 1 for n in window]).reshape(-1, 1)
-        labels.append(label)
-    return windows, labels
-
-
 def extract_windows_generative(events, window_size, step_size) -> tuple[list, list]:
     """Extract windows and labels from a list of note events
     Include the label in the
     """
-    windows = []
-    labels = []
-    for i in range(0, len(events) - window_size, step_size):
-        window = events[i : i + window_size]
+    windows, labels = [], []
+    padded_events = pad_events(events=events.copy(), window_size=window_size)
+    h = window_size // 2
+    for i in range(h, len(events) + h, 1):
+        window = padded_events[i - h : i + h]
         preprocessed_window = preprocess_window_generative(window)
-        # shape of the window is (window_size, 4)
-        center_index = window_size // 2
-        label = convert_hand_to_number(window[center_index].hand)
+        label = convert_hand_to_number(window[h].hand)
         label = np.array([label])
-
-        for i in range(center_index, window_size):
+        for i in range(h, window_size):
             preprocessed_window[i, -1] = -1
+        windows.append(preprocessed_window)
+        labels.append(label)
+    return windows, labels
+
+
+def extract_windows_discriminative(events, window_size, step_size) -> tuple[list, list]:
+    """Extract windows and labels from a list of note events
+    Include the label in the
+    """
+    windows, labels = [], []
+    padded_events = pad_events(events=events.copy(), window_size=window_size)
+    h = window_size // 2
+    for i in range(h, len(events) + h, 1):
+        window = padded_events[i - h : i + h]
+        preprocessed_window = preprocess_window_discriminative(window)
+        label = convert_hand_to_number(window[h].hand)
+        label = np.array([label])
         windows.append(preprocessed_window)
         labels.append(label)
     return windows, labels
@@ -262,53 +254,72 @@ def extract_windows_from_files(
     return np.array(all_windows), np.array(all_labels)
 
 
-def generative_accuracy(paths, model, window_size, device):
+def get_events(path):
     mp = MidiEventProcessor()
-    y_true = []
-    y_pred = []
-    for path in paths:
-        print(f"Processing {path}")
-        events = mp.extract_note_events(path)
-        padded_events = pad_events(events.copy(), window_size)
-        # print("padded events", len(padded_events))
-        # print("events", len(events))
-        y_pred_temp = []
-        y_true_temp = []
-        h = window_size // 2
-        for i in range(h, len(events) + h, 1):
-            # 1. extract the window
-            window_events = padded_events[i - h : i + h]
-            assert len(window_events) == window_size
-            # 2. preprocess the window
-            preprocessed_window = preprocess_window_generative(window_events)
-            # 3. add a slice of y_pred to the last column, pad with -1
-            preprocessed_window[:, -1] = -1  # we don't know the output yet
-            prev_out = y_pred_temp[-h:]
-            preprocessed_window[: len(prev_out), -1] = prev_out
+    return mp.extract_note_events(path)
 
-            # 4. get the label
-            label = padded_events[i].hand
-            label = convert_hand_to_number(label)
-            y_true_temp.append(label)
 
-            tensor_window = (
-                torch.tensor(preprocessed_window).float().to(device).unsqueeze(0)
-            )
+def discriminative_inference(mid_path, model, window_size, device):
+    print(f"Processing {mid_path}")
+    events = get_events(mid_path)
+    padded_events = pad_events(events.copy(), window_size)
+    y_pred_temp, y_true_temp = [], []
+    h = window_size // 2
+    for i in range(h, len(events) + h, 1):
+        window_events = padded_events[i - h : i + h]
+        preprocessed_window = preprocess_window_discriminative(window_events)
+        label = padded_events[i].hand
+        label = convert_hand_to_number(label)
+        y_true_temp.append(label)
 
-            output = model(tensor_window)
-            output = output.squeeze().cpu().detach().numpy()
-            # print(output)
-            output = 0 if output < 0.5 else 1
-            y_pred_temp.append(output)
-        y_pred.extend(y_pred_temp)
-        y_true.extend(y_true_temp)
+        tensor_window = torch.tensor(preprocessed_window).unsqueeze(0).to(device)
+        y_pred = model(tensor_window)
+        y_pred_temp.append(y_pred.cpu().detach().numpy()[0][0])
+    return events, y_pred_temp, y_true_temp
 
-        # song accuracy
-        acc_temp = np.sum(np.array(y_true_temp) == np.array(y_pred_temp)) / len(
-            y_true_temp
+
+def generative_inferences(mid_path, model, window_size, device):
+    print(f"Processing {mid_path}")
+    events = get_events(mid_path)
+    padded_events = pad_events(events.copy(), window_size)
+    y_pred_temp, y_true_temp = [], []
+    h = window_size // 2
+    for i in range(h, len(events) + h, 1):
+        window_events = padded_events[i - h : i + h]
+        preprocessed_window = preprocess_window_generative(window_events)
+        preprocessed_window[:, -1] = -1  # we don't know the output yet
+        prev_out = y_pred_temp[-h:]
+        preprocessed_window[: len(prev_out), -1] = prev_out
+
+        label = padded_events[i].hand
+        label = convert_hand_to_number(label)
+        y_true_temp.append(label)
+
+        tensor_window = (
+            torch.tensor(preprocessed_window).float().to(device).unsqueeze(0)
         )
-        print(f"Song accuracy: {acc_temp}")
-    return np.sum(np.array(y_true) == np.array(y_pred)) / len(y_true)
+        output = model(tensor_window)
+        output = output.squeeze().cpu().detach().numpy()
+        output = 0 if output < 0.5 else 1
+        y_pred_temp.append(output)
+    return events, y_true_temp, y_pred_temp
+
+
+# def generative_accuracies(paths, model, window_size, device):
+#     y_true, y_pred = [], []
+#     for path in paths:
+#         events, y_true_temp, y_pred_temp = get_generative_inference_results(
+#             path, model, window_size, device
+#         )
+#         y_pred.extend(y_pred_temp)
+#         y_true.extend(y_true_temp)
+
+#         # song accuracy
+#         acc_temp = np.sum(np.array(y_true_temp) == np.array(y_pred_temp)) / len(
+#             y_true_temp
+#         )
+#         print(f"Song accuracy: {acc_temp}")
+#     return np.sum(np.array(y_true) == np.array(y_pred)) / len(y_true)
 
 
 def accuracy(y_true: list[int], y_pred: list[int]):

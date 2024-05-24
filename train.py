@@ -6,6 +6,7 @@ from tqdm import tqdm
 from torch.utils.data import DataLoader
 import json
 import os
+import argparse
 
 from models.lstm import LSTMModel
 from models.handformer import HandformerModel
@@ -19,7 +20,16 @@ def lstm_model(h_params):
     return LSTMModel(**h_params).to(h_params["device"])
 
 
+def read_h_params(json_path):
+    with open(json_path, "r") as f:
+        h_params = json.load(f)
+    return h_params
+
+
 def main():
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--config_file", required=True)
+    args = parser.parse_args()
     run_name = U.generate_complex_random_name()
     run_path = Path(os.getcwd()) / "results" / Path(run_name)
     if not run_path.exists():
@@ -28,41 +38,21 @@ def main():
     print(f"Run name: {run_name}")
     logger = U.setup_logger(__name__, str(run_path), "log")
 
-    h_params = {
-        "run_name": run_name,
-        "max_files": None,
-        "seed": 42,
-        "batch_size": 64,
-        "num_epochs": 2,
-        "window_size": 60,
-        "input_size": 4,
-        "hidden_size": 32,
-        "num_heads": 16,
-        "dim_feedforward": 64,
-        "dropout": 0.1,
-        "num_layers": 2,
-        "num_classes": 1,
-        "n_folds": 10,
-        "use_early_stopping": True,
-        "patience": 5,
-        "device": str(
-            torch.device(
-                "cuda"
-                if torch.cuda.is_available()
-                else ("mps" if torch.backends.mps.is_available() else "cpu")
-            )
-        ),
-        "preprocessing_func": "U.extract_windows_generative",
-        "model_func": "hand_former_model",
-        "use_kfold": False,
-    }
+    device = U.get_device()
+
+    h_params = read_h_params(args.config_file)
+
+    # set extra params
+    h_params["run_name"] = run_name
+    h_params["device"] = str(device)
+
     logger.info("Running with fixed parameters:")
     U.log_parameters(h_params, logger)
     logger.info("===========================================================\n\n")
 
     torch.manual_seed(h_params["seed"])
 
-    k_fold_data = U.k_fold_split(h_params["n_folds"], max_files=h_params["max_files"])
+    k_fold_data = U.k_fold_split(h_params["n_folds"])
 
     model = None
     all_results = {}
@@ -111,15 +101,8 @@ def main():
             logger,
             **h_params,
         )
-
         all_results[f"fold_{i}"] = results
         # running generative_accuracy and appending to results
-        generative_accuracy = U.generative_accuracy(
-            val_paths, model, h_params["window_size"], h_params["device"]
-        )
-        logger.info(f"Generative accuracy: {generative_accuracy}")
-        results["generative_accuracy"] = generative_accuracy
-
         if not h_params["use_kfold"]:
             break
 

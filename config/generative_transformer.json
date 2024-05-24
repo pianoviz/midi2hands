@@ -1,0 +1,20 @@
+{
+  "seed": 42,
+  "batch_size": 64,
+  "num_epochs": 2,
+  "window_size": 60,
+  "input_size": 4,
+  "hidden_size": 32,
+  "num_heads": 16,
+  "dim_feedforward": 64,
+  "dropout": 0.1,
+  "num_layers": 2,
+  "num_classes": 1,
+  "n_folds": 10,
+  "use_early_stopping": true,
+  "patience": 5,
+  "preprocessing_func": "U.extract_windows_generative",
+  "inference_func": "U.generative_inference",
+  "model_func": "hand_former_model",
+  "use_kfold": false
+}

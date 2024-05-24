@@ -3,7 +3,8 @@ events
 vids/
 .DS_Store
 cache/*
-*.json
+results
 *.log
 lstm/*
 __pycache__/
+pyrightconfig.json
