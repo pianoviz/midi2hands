@@ -8,6 +8,15 @@ import json
 import os
 
 from models.lstm import LSTMModel
+from models.handformer import HandformerModel
+
+
+def hand_former_model(h_params):
+    return HandformerModel(**h_params).to(h_params["device"])
+
+
+def lstm_model(h_params):
+    return LSTMModel(**h_params).to(h_params["device"])
 
 
 def main():
@@ -25,14 +34,17 @@ def main():
         "seed": 42,
         "batch_size": 64,
         "num_epochs": 2,
-        "window_size": 30,
+        "window_size": 60,
         "input_size": 4,
-        "hidden_size": 16,
+        "hidden_size": 32,
+        "num_heads": 16,
+        "dim_feedforward": 64,
+        "dropout": 0.1,
         "num_layers": 2,
         "num_classes": 1,
         "n_folds": 10,
         "use_early_stopping": True,
-        "patience": 3,
+        "patience": 5,
         "device": str(
             torch.device(
                 "cuda"
@@ -41,6 +53,7 @@ def main():
             )
         ),
         "preprocessing_func": "U.extract_windows_generative",
+        "model_func": "hand_former_model",
         "use_kfold": False,
     }
     logger.info("Running with fixed parameters:")
@@ -62,7 +75,7 @@ def main():
     ):
         train_paths, val_paths = paths
 
-        model = LSTMModel(**h_params).to(h_params["device"])
+        model = eval(h_params["model_func"])(h_params)
         criterion = nn.BCELoss()
         optimizer = torch.optim.Adam(model.parameters(), lr=0.001)
 
