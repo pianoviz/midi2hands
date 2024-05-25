@@ -16,11 +16,18 @@ memory = Memory(location="cache", verbose=0)
 
 
 class NoteEvent:
-    def __init__(self, note: int, velocity: int, start: int, hand: str | None = None):
+    def __init__(
+        self,
+        note: int,
+        velocity: int,
+        start: int,
+        end: int | None = None,
+        hand: str | None = None,
+    ):
         self.note = note
         self.velocity = velocity
         self.start = start
-        self.end = None
+        self.end = end
         self.hand = hand
 
     def set_end(self, end):
@@ -50,7 +57,7 @@ class MidiEventProcessor:
 
     def _create_note_event(self, active_notes, midi_message, timestamp, hand: str):
         note_event = NoteEvent(
-            midi_message.note, midi_message.velocity, timestamp, hand
+            midi_message.note, midi_message.velocity, timestamp, hand=hand
         )
         active_notes[midi_message.note] = note_event
 
@@ -260,40 +267,46 @@ def get_events(path):
 
 
 def discriminative_inference(mid_path, model, window_size, device):
+    print("Using Discriminative inference")
     print(f"Processing {mid_path}")
     events = get_events(mid_path)
     padded_events = pad_events(events.copy(), window_size)
-    y_pred_temp, y_true_temp = [], []
+    y_true, y_pred = [], []
     h = window_size // 2
     for i in range(h, len(events) + h, 1):
         window_events = padded_events[i - h : i + h]
         preprocessed_window = preprocess_window_discriminative(window_events)
         label = padded_events[i].hand
         label = convert_hand_to_number(label)
-        y_true_temp.append(label)
+        y_true.append(label)
 
         tensor_window = torch.tensor(preprocessed_window).unsqueeze(0).to(device)
-        y_pred = model(tensor_window)
-        y_pred_temp.append(y_pred.cpu().detach().numpy()[0][0])
-    return events, y_pred_temp, y_true_temp
+        output = model(tensor_window)
+        output = output.squeeze().cpu().detach().numpy()
+        output = 0 if output < 0.5 else 1
+        y_pred.append(output)
+
+    return events, y_true, y_pred
 
 
-def generative_inferences(mid_path, model, window_size, device):
+def generative_inference(mid_path, model, window_size, device):
+    print("Using generative inference")
     print(f"Processing {mid_path}")
     events = get_events(mid_path)
     padded_events = pad_events(events.copy(), window_size)
-    y_pred_temp, y_true_temp = [], []
+    y_true, y_pred = [], []
     h = window_size // 2
     for i in range(h, len(events) + h, 1):
         window_events = padded_events[i - h : i + h]
         preprocessed_window = preprocess_window_generative(window_events)
         preprocessed_window[:, -1] = -1  # we don't know the output yet
-        prev_out = y_pred_temp[-h:]
+        prev_out = y_pred[-h:]
         preprocessed_window[: len(prev_out), -1] = prev_out
 
         label = padded_events[i].hand
         label = convert_hand_to_number(label)
-        y_true_temp.append(label)
+        print(label)
+        y_true.append(label)
 
         tensor_window = (
             torch.tensor(preprocessed_window).float().to(device).unsqueeze(0)
@@ -301,8 +314,8 @@ def generative_inferences(mid_path, model, window_size, device):
         output = model(tensor_window)
         output = output.squeeze().cpu().detach().numpy()
         output = 0 if output < 0.5 else 1
-        y_pred_temp.append(output)
-    return events, y_true_temp, y_pred_temp
+        y_pred.append(output)
+    return events, y_true, y_pred
 
 
 # def generative_accuracies(paths, model, window_size, device):

@@ -8,3 +8,4 @@ results
 lstm/*
 __pycache__/
 pyrightconfig.json
+workdir

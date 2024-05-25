@@ -35,7 +35,7 @@ def get_model(model_dir, h_params, device):
 
 
 def get_test_files():
-    return Path("data/test").glob("*.mid")
+    return list(Path("data/test").glob("*.mid"))
 
 
 def accuracy_loss_plot(
@@ -201,33 +201,44 @@ def get_test_acc(model, h_params):
     print(classification_report(y_true, y_pred))
 
 
-def generate_videos(
-    mid_path: Path, model_dir: Path, model, device, inference_func: Callable, **h_params
-):
+def generate_videos(mid_path: Path, model_dir: Path, model, **h_params):
     """
     Saves a rendered video of the predicted events, the original events and video of error events marked red
     """
-    import dotenv
+    print(mid_path)
     import os
+
+    try:
+        import src.main as M  # type: ignore
+    except ModuleNotFoundError:
+        print("You have not installed the video generator package")
+        return
+
+    from pathlib import Path
+
+    model = model.to(h_params["device"])
 
     out_dir = model_dir / str(mid_path.name)
     if not out_dir.exists():
         out_dir.mkdir()
 
     events, y_true, y_pred = eval(h_params["inference_func"])(
-        mid_path, model, h_params["window_size"], device
+        mid_path, model, h_params["window_size"], h_params["device"]
     )
+    print(y_true[:10], y_pred[:10])
+    print(f"accuracy: {U.accuracy(y_true, y_pred)}")
 
-    dotenv.load_dotenv()
     midi2vid_program = os.getenv("MIDI2VID_PROGRAM")
     # the binary is yet
     # get the test data
 
     # 1. Create the predicted events
+    U.note_events_to_json(events, output_file_path=out_dir / "original.json")
+
     predicted_events = events.copy()
     for i in range(len(predicted_events)):
-        predicted_events[i].hand = "left" if y_pred[i] == 0 else 1
-    U.note_events_to_json(events, output_file_path=out_dir / "predicted.json")
+        predicted_events[i].hand = "left" if y_pred[i] == 0 else "right"
+    U.note_events_to_json(predicted_events, output_file_path=out_dir / "predicted.json")
 
     # 2. Create a combined version where a wrong assignment is marked with None
     merged_events = events.copy()
@@ -235,17 +246,21 @@ def generate_videos(
         if y_pred[i] != y_true[i]:
             merged_events[i].hand = None
         else:
-            merged_events[i].hand = "left" if y_true[i] == 0 else 1
-    U.note_events_to_json(events, output_file_path=out_dir / "merged.json")
+            merged_events[i].hand = "left" if y_true[i] == 0 else "right"
+    U.note_events_to_json(merged_events, output_file_path=out_dir / "merged.json")
 
-    os.system(
-        f"{midi2vid_program} --mid_path={str(mid_path.absolute)} --out_path={str(out_dir.absolute)}/original.mp4"
+    M.convert_video(
+        mid_path, out_dir / "original.mp4", events_path=out_dir / "original.json"
     )
-    os.system(
-        f"{midi2vid_program} --mid_path={str(mid_path.absolute)} --out_path={str(out_dir.absolute)}/predicted.mp4 --events_path={str(out_dir.absolute)}/predicted.json"
+    M.convert_video(
+        mid_path,
+        out_dir / "predicted.mp4",
+        events_path=out_dir / "predicted.json",
     )
-    os.system(
-        f"{midi2vid_program} --mid_path={str(mid_path.absolute)} --out_path={str(out_dir.absolute)}/merged.mp4 --events_path={str(out_dir.absolute)}/merged.json"
+    M.convert_video(
+        mid_path,
+        out_dir / "merged.mp4",
+        events_path=out_dir / "merged.json",
     )
 
 
@@ -260,8 +275,17 @@ if __name__ == "__main__":
         results = json.load(f)
     h_params = results["h_params"]
     device = U.get_device()
+    h_params["device"] = str(device)
 
     model = get_model(model_dir, h_params, device)
+
+    test_paths = get_test_files()
+    generate_videos(
+        mid_path=test_paths[0],
+        model_dir=model_dir,
+        model=model,
+        **h_params,
+    )
 
     # to_onnx(model_dir, "model.onnx", **h_params)
 
