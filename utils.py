@@ -389,10 +389,8 @@ def generate_complex_random_name():
     return f"{adjective}_{noun}_{number}"
 
 
-def k_fold_split(k, max_files=None):
+def k_fold_split(k):
     paths = list(Path("data").rglob("*.mid"))
-    if max_files:
-        paths = paths[: max_files + 1]
     n = len(paths)
     fold_size = n // k
     folds = []
@@ -402,6 +400,8 @@ def k_fold_split(k, max_files=None):
         val_fold = paths[start:end]
         train_fold = paths[:start] + paths[end:]
         folds.append((train_fold, val_fold))
+    # last fold should contain all training data for the final model
+    folds.append((paths, []))
     return folds
 
 
