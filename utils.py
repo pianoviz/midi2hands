@@ -400,8 +400,6 @@ def k_fold_split(k):
         val_fold = paths[start:end]
         train_fold = paths[:start] + paths[end:]
         folds.append((train_fold, val_fold))
-    # last fold should contain all training data for the final model
-    folds.append((paths, []))
     return folds
 
 
