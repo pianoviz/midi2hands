@@ -45,6 +45,7 @@ def main():
 
     model = None
     all_results = {}
+    all_results["h_params"] = h_params
     for i, paths in enumerate(
         tqdm(
             k_fold_data,
@@ -96,9 +97,10 @@ def main():
         gen_accuracies = []
         for val_path in val_paths:
             _, y_true, y_pred = eval(h_params["inference_func"])(
-                model,
                 val_path,
+                model,
                 window_size=h_params["window_size"],
+                device=h_params["device"],
             )
             generative_accuracy = U.accuracy(y_true, y_pred)
             gen_accuracies.append(generative_accuracy)
@@ -111,7 +113,6 @@ def main():
             break
 
     with open(run_path / "results.json", "w") as f:
-        print(all_results)
         json.dump(all_results, f, indent=4)
 
     # save model

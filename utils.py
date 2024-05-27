@@ -1,6 +1,7 @@
 import logging
 import torch
 import random
+import copy
 import numpy as np
 from mido.midifiles.midifiles import MidiFile
 from torch.utils.data import Dataset
@@ -98,11 +99,11 @@ class MidiEventProcessor:
         return self._extract_and_process_midi_tracks(midi_file_path)
 
 
-def hand_former_model(h_params, device):
+def hand_former_model(h_params):
     return HandformerModel(**h_params).to(h_params["device"])
 
 
-def lstm_model(h_params, device):
+def lstm_model(h_params):
     return LSTMModel(**h_params).to(h_params["device"])
 
 
@@ -315,7 +316,6 @@ def generative_inference(mid_path, model, window_size, device):
 
         label = padded_events[i].hand
         label = convert_hand_to_number(label)
-        print(label)
         y_true.append(label)
 
         tensor_window = (
@@ -455,7 +455,8 @@ def train_loop(
 
     # Function to process batches
 
-    best_val_loss = np.inf
+    best_val_score = 0
+    best_model_state = None
     epochs_without_improvement = 0
 
     for epoch in range(num_epochs):
@@ -498,9 +499,10 @@ def train_loop(
 
         # Early stopping
         if use_early_stopping:
-            if metrics["val_loss"][-1] < best_val_loss:
-                best_val_loss = metrics["val_loss"][-1]
+            if metrics["val_acc"][-1] > best_val_score:
+                best_val_score = metrics["val_acc"][-1]
                 epochs_without_improvement = 0
+                best_model_state = copy.deepcopy(model.state_dict())
             else:
                 epochs_without_improvement += 1
                 if epochs_without_improvement >= patience:
@@ -508,6 +510,10 @@ def train_loop(
                         f"Early stopping after {epoch+1} epochs without improvement"
                     )
                     break
+            # Load the best model state
+    if best_model_state is not None:
+        logger.info("Loading best model state")
+        model.load_state_dict(best_model_state)
     return metrics
 
 
