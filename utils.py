@@ -328,23 +328,6 @@ def generative_inference(mid_path, model, window_size, device):
     return events, y_true, y_pred
 
 
-# def generative_accuracies(paths, model, window_size, device):
-#     y_true, y_pred = [], []
-#     for path in paths:
-#         events, y_true_temp, y_pred_temp = get_generative_inference_results(
-#             path, model, window_size, device
-#         )
-#         y_pred.extend(y_pred_temp)
-#         y_true.extend(y_true_temp)
-
-#         # song accuracy
-#         acc_temp = np.sum(np.array(y_true_temp) == np.array(y_pred_temp)) / len(
-#             y_true_temp
-#         )
-#         print(f"Song accuracy: {acc_temp}")
-#     return np.sum(np.array(y_true) == np.array(y_pred)) / len(y_true)
-
-
 def accuracy(y_true: list[int], y_pred: list[int]):
     return np.mean(np.array(y_true) == np.array(y_pred))
 

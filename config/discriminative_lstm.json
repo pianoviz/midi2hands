@@ -6,7 +6,7 @@
   "input_size": 3,
   "hidden_size": 32,
   "dropout": 0.1,
-  "num_layers": 2,
+  "num_layers": 3,
   "num_classes": 1,
   "n_folds": 10,
   "use_early_stopping": true,
@@ -14,5 +14,5 @@
   "preprocessing_func": "U.extract_windows_discriminative",
   "inference_func": "U.discriminative_inference",
   "model_func": "U.lstm_model",
-  "use_kfold": false
+  "use_kfold": true
 }

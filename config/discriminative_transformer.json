@@ -16,5 +16,5 @@
   "preprocessing_func": "U.extract_windows_discriminative",
   "inference_func": "U.discriminative_inference",
   "model_func": "U.hand_former_model",
-  "use_kfold": false
+  "use_kfold": true
 }

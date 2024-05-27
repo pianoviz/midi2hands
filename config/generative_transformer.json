@@ -16,5 +16,5 @@
   "preprocessing_func": "U.extract_windows_generative",
   "inference_func": "U.generative_inference",
   "model_func": "U.hand_former_model",
-  "use_kfold": false
+  "use_kfold": true
 }

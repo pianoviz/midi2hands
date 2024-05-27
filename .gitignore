@@ -9,3 +9,4 @@ lstm/*
 __pycache__/
 pyrightconfig.json
 workdir
+nohup.out
