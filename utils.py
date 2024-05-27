@@ -8,6 +8,8 @@ from pathlib import Path
 from typing import Callable, List, Tuple, Any
 import shutil
 from joblib import Memory
+from models.lstm import LSTMModel
+from models.handformer import HandformerModel
 
 torch.manual_seed(0)
 
@@ -94,6 +96,14 @@ class MidiEventProcessor:
 
     def extract_note_events(self, midi_file_path: Path) -> list[NoteEvent]:
         return self._extract_and_process_midi_tracks(midi_file_path)
+
+
+def hand_former_model(h_params, device):
+    return HandformerModel(**h_params).to(h_params["device"])
+
+
+def lstm_model(h_params, device):
+    return LSTMModel(**h_params).to(h_params["device"])
 
 
 def note_events_to_json(events, output_file_path: Path):

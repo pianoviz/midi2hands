@@ -8,17 +8,6 @@ import json
 import os
 import argparse
 
-from models.lstm import LSTMModel
-from models.handformer import HandformerModel
-
-
-def hand_former_model(h_params):
-    return HandformerModel(**h_params).to(h_params["device"])
-
-
-def lstm_model(h_params):
-    return LSTMModel(**h_params).to(h_params["device"])
-
 
 def read_h_params(json_path):
     with open(json_path, "r") as f:
@@ -27,22 +16,22 @@ def read_h_params(json_path):
 
 
 def main():
+    # args
     parser = argparse.ArgumentParser()
     parser.add_argument("--config_file", required=True)
     args = parser.parse_args()
+
+    # paths and run name
     run_name = U.generate_complex_random_name()
     run_path = Path(os.getcwd()) / "results" / Path(run_name)
     if not run_path.exists():
         run_path.mkdir(parents=True)
-
     print(f"Run name: {run_name}")
     logger = U.setup_logger(__name__, str(run_path), "log")
 
+    # config
     device = U.get_device()
-
     h_params = read_h_params(args.config_file)
-
-    # set extra params
     h_params["run_name"] = run_name
     h_params["device"] = str(device)
 
@@ -103,6 +92,21 @@ def main():
         )
         all_results[f"fold_{i}"] = results
         # running generative_accuracy and appending to results
+        # use the inference function to generate calculate the generative accuracy
+        gen_accuracies = []
+        for val_path in val_paths:
+            _, y_true, y_pred = eval(h_params["inference_func"])(
+                model,
+                val_path,
+                window_size=h_params["window_size"],
+            )
+            generative_accuracy = U.accuracy(y_true, y_pred)
+            gen_accuracies.append(generative_accuracy)
+        all_results[f"fold_{i}"]["generative_accuracy"] = gen_accuracies
+        logger.info(
+            f"Generative accuracy mean: {sum(gen_accuracies)/ len(gen_accuracies)}"
+        )
+
         if not h_params["use_kfold"]:
             break
 
