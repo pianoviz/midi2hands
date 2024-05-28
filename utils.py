@@ -169,15 +169,49 @@ def split_data():
         shutil.copy(path, new_path)
 
 
-def pad_events(events: list[NoteEvent], window_size: int) -> list[NoteEvent]:
-    # pad the events with None values
+def pad_events(events: List[NoteEvent], window_size) -> List[NoteEvent]:
+    """
+    Pad the events with None values at the beginning and the end of the list.
+
+    Args:
+    events (List[NoteEvent]): List of note events.
+    window_size (int): The size of the window for which to pad the events.
+
+    Returns:
+    List[NoteEvent]: New list of note events with padding added.
+    """
+    # Calculate the amount of padding needed on each side
     m = window_size // 2
+    # Initialize a new list for padded events
+    padded_events = []
+
+    # Create and add padding at the beginning of the list
     for _ in range(m):
         dummy_note = NoteEvent(note=-1, velocity=-1, start=-1, hand=None)
         dummy_note.set_end(-1)
-        events.insert(0, dummy_note)
-        events.append(dummy_note)
-    return events
+        padded_events.append(dummy_note)
+
+    # Add the original events
+    padded_events.extend(events)
+
+    # Create and add padding at the end of the list
+    for _ in range(m):
+        dummy_note = NoteEvent(note=-1, velocity=-1, start=-1, hand=None)
+        dummy_note.set_end(-1)
+        padded_events.append(dummy_note)
+
+    return padded_events
+
+
+# def pad_events(events: list[NoteEvent], window_size: int) -> list[NoteEvent]:
+#     # pad the events with None values
+#     m = window_size // 2
+#     for _ in range(m):
+#         dummy_note = NoteEvent(note=-1, velocity=-1, start=-1, hand=None)
+#         dummy_note.set_end(-1)
+#         events.insert(0, dummy_note)
+#         events.append(dummy_note)
+#     return events
 
 
 def convert_hand_to_number(hand: str | None):
@@ -211,7 +245,6 @@ def preprocess_window_generative(note_events: list[NoteEvent]):
         window[non_pad_indices, 2]
     )
     window[non_pad_indices, 0] = (window[non_pad_indices, 0] - 21) / 88
-
     return window
 
 
@@ -221,52 +254,69 @@ ExtractFuncType = Callable[
 ]
 
 
-def extract_windows_generative(events, window_size, step_size) -> tuple[list, list]:
+def extract_windows_generative(events, window_size) -> tuple[list, list]:
     """Extract windows and labels from a list of note events
     Include the label in the
     """
     windows, labels = [], []
-    padded_events = pad_events(events=events.copy(), window_size=window_size)
+    padded_events = pad_events(events=events.deepcopy(), window_size=window_size)
     h = window_size // 2
-    for i in range(h, len(events) + h, 1):
+    for i in range(h, len(events) + h):
         window = padded_events[i - h : i + h]
         preprocessed_window = preprocess_window_generative(window)
         label = convert_hand_to_number(window[h].hand)
         label = np.array([label])
-        for i in range(h, window_size):
-            preprocessed_window[i, -1] = -1
+        for j in range(h, window_size):
+            preprocessed_window[j, -1] = -1
         windows.append(preprocessed_window)
         labels.append(label)
     return windows, labels
 
 
-def extract_windows_discriminative(events, window_size, step_size) -> tuple[list, list]:
+def extract_windows_discriminative(events, window_size) -> tuple[list, list]:
     """Extract windows and labels from a list of note events
     Include the label in the
     """
     windows, labels = [], []
-    padded_events = pad_events(events=events.copy(), window_size=window_size)
+    padded_events = pad_events(events=copy.deepcopy(events), window_size=window_size)
     h = window_size // 2
     for i in range(h, len(events) + h, 1):
-        window = padded_events[i - h : i + h]
-        preprocessed_window = preprocess_window_discriminative(window)
-        label = convert_hand_to_number(window[h].hand)
-        label = np.array([label])
+        window_events = padded_events[i - h : i + h]
+        preprocessed_window = preprocess_window_discriminative(window_events)
+        label = np.array([convert_hand_to_number(window_events[h].hand)])
         windows.append(preprocessed_window)
         labels.append(label)
     return windows, labels
 
 
+def discriminative_inference(mid_path, model, window_size, device):
+    events = get_events(mid_path)
+    padded_events = pad_events(copy.deepcopy(events), window_size)
+    y_true, y_pred = [], []
+    h = window_size // 2
+    for i in range(h, len(events) + h, 1):
+        window_events = padded_events[i - h : i + h]
+        label = window_events[h].hand
+        preprocessed_window = preprocess_window_discriminative(window_events)
+        label = convert_hand_to_number(label)
+        y_true.append(label)
+
+        tensor_window = torch.tensor(preprocessed_window).unsqueeze(0).to(device)
+        output = model(tensor_window)
+        output = output.squeeze().cpu().detach().numpy()
+        output = 0 if output < 0.5 else 1
+        y_pred.append(output)
+    return events, y_true, y_pred
+
+
 # @memory.cache
-def extract_windows_from_files(
-    paths, window_size, step_size, preprocess_func: ExtractFuncType
-):
+def extract_windows_from_files(paths, window_size, preprocess_func: ExtractFuncType):
     all_windows = []
     all_labels = []
     mp = MidiEventProcessor()
     for path in paths:
         events = mp.extract_note_events(path)
-        windows, labels = preprocess_func(events, window_size, step_size)
+        windows, labels = preprocess_func(events, window_size)
         all_windows.extend(windows)
         all_labels.extend(labels)
     return np.array(all_windows), np.array(all_labels)
@@ -277,34 +327,9 @@ def get_events(path):
     return mp.extract_note_events(path)
 
 
-def discriminative_inference(mid_path, model, window_size, device):
-    print("Using Discriminative inference")
-    print(f"Processing {mid_path}")
-    events = get_events(mid_path)
-    padded_events = pad_events(events.copy(), window_size)
-    y_true, y_pred = [], []
-    h = window_size // 2
-    for i in range(h, len(events) + h, 1):
-        window_events = padded_events[i - h : i + h]
-        preprocessed_window = preprocess_window_discriminative(window_events)
-        label = padded_events[i].hand
-        label = convert_hand_to_number(label)
-        y_true.append(label)
-
-        tensor_window = torch.tensor(preprocessed_window).unsqueeze(0).to(device)
-        output = model(tensor_window)
-        output = output.squeeze().cpu().detach().numpy()
-        output = 0 if output < 0.5 else 1
-        y_pred.append(output)
-
-    return events, y_true, y_pred
-
-
 def generative_inference(mid_path, model, window_size, device):
-    print("Using generative inference")
-    print(f"Processing {mid_path}")
     events = get_events(mid_path)
-    padded_events = pad_events(events.copy(), window_size)
+    padded_events = pad_events(copy.deepcopy(events), window_size)
     y_true, y_pred = [], []
     h = window_size // 2
     for i in range(h, len(events) + h, 1):
@@ -383,7 +408,7 @@ def generate_complex_random_name():
 
 
 def k_fold_split(k):
-    paths = list(Path("data").rglob("*.mid"))
+    paths = list(Path("data/train").rglob("*.mid"))
     n = len(paths)
     fold_size = n // k
     folds = []
@@ -412,7 +437,7 @@ def process_batch(windows, labels, model, criterion, device):
         outputs = outputs.unsqueeze(0)
 
     y_true = labels.cpu().numpy().astype(int).tolist()
-    y_pred = np.where(outputs.cpu().detach().numpy() > 0.5, 1, 0).tolist()
+    y_pred = np.where(outputs.cpu().detach().numpy() < 0.5, 0, 1).tolist()
 
     return loss, y_true, y_pred
 

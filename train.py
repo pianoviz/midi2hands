@@ -62,15 +62,15 @@ def main():
         train_windows, train_labels = U.extract_windows_from_files(
             train_paths,
             window_size=h_params["window_size"],
-            step_size=1,
             preprocess_func=eval(h_params["preprocessing_func"]),
         )
         val_windows, val_labels = U.extract_windows_from_files(
-            val_paths,
+            paths=val_paths,
             window_size=h_params["window_size"],
-            step_size=1,
             preprocess_func=eval(h_params["preprocessing_func"]),
         )
+        print(len(train_windows), len(val_windows))
+        print(len(train_labels), len(val_labels))
 
         train_dataset = U.MidiDataset(train_windows, train_labels)
         val_dataset = U.MidiDataset(val_windows, val_labels)
@@ -78,32 +78,41 @@ def main():
         train_loader = DataLoader(
             train_dataset, batch_size=h_params["batch_size"], shuffle=True
         )
-        val_loader = DataLoader(
-            val_dataset, batch_size=h_params["batch_size"], shuffle=False
-        )
+        val_loader = DataLoader(val_dataset, batch_size=1024, shuffle=False)
 
         results = U.train_loop(
-            model,
-            train_loader,
-            val_loader,
-            optimizer,
-            criterion,
-            logger,
+            model=model,
+            train_loader=train_loader,
+            val_loader=val_loader,
+            optimizer=optimizer,
+            criterion=criterion,
+            logger=logger,
             **h_params,
         )
         all_results[f"fold_{i}"] = results
         # running generative_accuracy and appending to results
         # use the inference function to generate calculate the generative accuracy
         gen_accuracies = []
-        for val_path in val_paths:
-            _, y_true, y_pred = eval(h_params["inference_func"])(
-                val_path,
-                model,
-                window_size=h_params["window_size"],
-                device=h_params["device"],
+        model.eval()
+        n = 0
+        with torch.no_grad():
+            for val_path in train_paths:
+                _, y_true, y_pred = eval(h_params["inference_func"])(
+                    val_path,
+                    model,
+                    window_size=h_params["window_size"],
+                    device=h_params["device"],
+                )
+                print(len(y_true), len(y_pred))
+                n += len(y_true)
+                generative_accuracy = U.accuracy(y_true, y_pred)
+                gen_accuracies.append(generative_accuracy)
+            all_results[f"fold_{i}"]["generative_accuracy"] = gen_accuracies
+            logger.info(
+                f"Generative accuracy mean: {sum(gen_accuracies)/ len(gen_accuracies)}"
             )
-            generative_accuracy = U.accuracy(y_true, y_pred)
-            gen_accuracies.append(generative_accuracy)
+        print(f"n from inference: {n}")
+
         all_results[f"fold_{i}"]["generative_accuracy"] = gen_accuracies
         logger.info(
             f"Generative accuracy mean: {sum(gen_accuracies)/ len(gen_accuracies)}"
