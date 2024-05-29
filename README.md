@@ -3,7 +3,6 @@
 This project is about training and evaluating deep learning models for the task of predicting what hand is supposed to play what note in a piano piece.
 
 ### Repo layout
-
 .
 ├── README.md
 ├── archive
@@ -39,9 +38,13 @@ This project is about training and evaluating deep learning models for the task 
 
 
 The idea is that models are defined in separate files as well as configurations.
-utils.py contain all helper functions and is used by train.py.
+utils.py contain all helper functions and is used by train.py and eval.py.
+
 Configurations of the models are passed to train.py as .json files.
+Results, model weights and logs from training are stored results/.
+The directory good_results/ contain the results that were used in the submitted project report.
+
 eval.py is used in conjunction with a directory that holds the model to be evaluated.
-Results, model weights and logs are stored results/.
+
 
 Notebooks have been used to test and iterate and are not needed to rerun our results.
