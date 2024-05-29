@@ -15,13 +15,7 @@ import numpy as np
 def get_model(model_dir, h_params, device):
     """Try to read the model from the state_dict file"""
 
-    model = LSTMModel(
-        input_size=h_params["input_size"],
-        hidden_size=h_params["hidden_size"],
-        num_layers=h_params["num_layers"],
-        num_classes=h_params["num_classes"],
-        device=device,
-    )
+    model = eval(h_params["model_func"])(h_params)
     model.load_state_dict(torch.load(model_dir / "model.pth", map_location=device))
     model.eval()
     return model
@@ -160,10 +154,10 @@ if __name__ == "__main__":
         results = json.load(f)
     h_params = results["h_params"]
 
-    video = False
+    video = True
     to_onnex = False
     inference_acc = False
-    train_stats = True
+    train_stats = False
 
     device = U.get_device()
     h_params["device"] = str(device)
@@ -173,7 +167,7 @@ if __name__ == "__main__":
 
     if video:
         generate_videos(
-            mid_path=test_paths[0],
+            mid_path=test_paths[1],
             model_dir=model_dir,
             model=model,
             **h_params,

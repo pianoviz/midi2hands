@@ -69,8 +69,6 @@ def main():
             window_size=h_params["window_size"],
             preprocess_func=eval(h_params["preprocessing_func"]),
         )
-        print(len(train_windows), len(val_windows))
-        print(len(train_labels), len(val_labels))
 
         train_dataset = U.MidiDataset(train_windows, train_labels)
         val_dataset = U.MidiDataset(val_windows, val_labels)
@@ -78,7 +76,9 @@ def main():
         train_loader = DataLoader(
             train_dataset, batch_size=h_params["batch_size"], shuffle=True
         )
-        val_loader = DataLoader(val_dataset, batch_size=1024, shuffle=False)
+        val_loader = DataLoader(
+            val_dataset, batch_size=h_params["batch_size"], shuffle=False
+        )
 
         results = U.train_loop(
             model=model,
@@ -90,33 +90,29 @@ def main():
             **h_params,
         )
         all_results[f"fold_{i}"] = results
-        # running generative_accuracy and appending to results
-        # use the inference function to generate calculate the generative accuracy
-        gen_accuracies = []
+        group_accuracies, y_true, y_pred = [], [], []
         model.eval()
-        n = 0
         with torch.no_grad():
             for val_path in train_paths:
-                _, y_true, y_pred = eval(h_params["inference_func"])(
+                _, y_t, y_p = eval(h_params["inference_func"])(
                     val_path,
                     model,
                     window_size=h_params["window_size"],
                     device=h_params["device"],
                 )
-                print(len(y_true), len(y_pred))
-                n += len(y_true)
-                generative_accuracy = U.accuracy(y_true, y_pred)
-                gen_accuracies.append(generative_accuracy)
-            all_results[f"fold_{i}"]["generative_accuracy"] = gen_accuracies
-            logger.info(
-                f"Generative accuracy mean: {sum(gen_accuracies)/ len(gen_accuracies)}"
-            )
-        print(f"n from inference: {n}")
+                y_true.extend(y_t)
+                y_pred.extend(y_p)
 
-        all_results[f"fold_{i}"]["generative_accuracy"] = gen_accuracies
-        logger.info(
-            f"Generative accuracy mean: {sum(gen_accuracies)/ len(gen_accuracies)}"
-        )
+                acc = U.accuracy(y_t, y_p)
+                group_accuracies.append(acc)
+
+        group_accuracy = sum(group_accuracies) / len(group_accuracies)
+        inference_accuracy = U.accuracy(y_true, y_pred)
+        all_results[f"fold_{i}"]["group_accuracy"] = group_accuracy
+        all_results[f"fold_{i}"]["inference_accuracy"] = inference_accuracy
+
+        logger.info(f"Inference group accuracy mean: {group_accuracy}")
+        logger.info(f"Inference mean: {inference_accuracy}")
 
         if not h_params["use_kfold"]:
             break
