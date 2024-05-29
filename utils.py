@@ -140,35 +140,6 @@ def get_device() -> str:
     )
 
 
-def random_split(paths, ratios):
-    random.seed(0)
-    random.shuffle(paths)
-    total = len(paths)
-    ratios = [int(r * total) for r in ratios]
-    return paths[: ratios[0]], paths[ratios[0] :]
-
-
-def split_data():
-    paths = list(Path("data").rglob("*.mid"))
-    print(f"Found {len(paths)} midi files")
-
-    # split paths into train and validation
-    train_paths, test_paths = random_split(paths, [0.9, 0.1])
-    train_paths = list(train_paths)
-
-    # creae directories
-    Path("data/train").mkdir(parents=True, exist_ok=True)
-    Path("data/test").mkdir(parents=True, exist_ok=True)
-    for i, path in enumerate(train_paths):
-        new_path = Path(f"data/train/{i:03}-{path.stem}.mid")
-        # copy the file to the new path
-        shutil.copy(path, new_path)
-    for i, path in enumerate(test_paths):
-        new_path = Path(f"data/test/{i:03}-{path.stem}.mid")
-        # copy the file to the new path
-        shutil.copy(path, new_path)
-
-
 def pad_events(events: List[NoteEvent], window_size) -> List[NoteEvent]:
     """
     Pad the events with None values at the beginning and the end of the list.
@@ -201,17 +172,6 @@ def pad_events(events: List[NoteEvent], window_size) -> List[NoteEvent]:
         padded_events.append(dummy_note)
 
     return padded_events
-
-
-# def pad_events(events: list[NoteEvent], window_size: int) -> list[NoteEvent]:
-#     # pad the events with None values
-#     m = window_size // 2
-#     for _ in range(m):
-#         dummy_note = NoteEvent(note=-1, velocity=-1, start=-1, hand=None)
-#         dummy_note.set_end(-1)
-#         events.insert(0, dummy_note)
-#         events.append(dummy_note)
-#     return events
 
 
 def convert_hand_to_number(hand: str | None):
@@ -249,7 +209,7 @@ def preprocess_window_generative(note_events: list[NoteEvent]):
 
 
 ExtractFuncType = Callable[
-    [List[NoteEvent], int, int],  # input
+    [List[NoteEvent], int],  # input
     Tuple[List[np.ndarray], List[np.ndarray]],  # output
 ]
 
@@ -523,7 +483,3 @@ def train_loop(
         logger.info("Loading best model state")
         model.load_state_dict(best_model_state)
     return metrics
-
-
-if __name__ == "__main__":
-    split_data()
