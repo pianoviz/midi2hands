@@ -219,7 +219,7 @@ def extract_windows_generative(events, window_size) -> tuple[list, list]:
     Include the label in the
     """
     windows, labels = [], []
-    padded_events = pad_events(events=events.deepcopy(), window_size=window_size)
+    padded_events = pad_events(events=copy.deepcopy(events), window_size=window_size)
     h = window_size // 2
     for i in range(h, len(events) + h):
         window = padded_events[i - h : i + h]

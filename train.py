@@ -93,7 +93,7 @@ def main():
         group_accuracies, y_true, y_pred = [], [], []
         model.eval()
         with torch.no_grad():
-            for val_path in train_paths:
+            for val_path in val_paths:
                 _, y_t, y_p = eval(h_params["inference_func"])(
                     val_path,
                     model,

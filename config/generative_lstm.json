@@ -2,7 +2,7 @@
   "seed": 42,
   "batch_size": 64,
   "num_epochs": 2,
-  "window_size": 30,
+  "window_size": 64,
   "input_size": 4,
   "hidden_size": 32,
   "dropout": 0.1,
@@ -14,5 +14,5 @@
   "preprocessing_func": "U.extract_windows_generative",
   "inference_func": "U.generative_inference",
   "model_func": "U.lstm_model",
-  "use_kfold": true
+  "use_kfold": false
 }
