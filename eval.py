@@ -15,21 +15,14 @@ import numpy as np
 def get_model(model_dir, h_params, device):
     """Try to read the model from the state_dict file"""
 
-    # model = LSTMModel(
-    #     input_size=h_params["input_size"],
-    #     hidden_size=h_params["hidden_size"],
-    #     num_layers=h_params["num_layers"],
-    #     num_classes=h_params["num_classes"],
-    #     device=device,
-    # )
     model = LSTMModel(
-        input_size=3,
-        hidden_size=64,
-        num_layers=3,
-        num_classes=1,
+        input_size=h_params["input_size"],
+        hidden_size=h_params["hidden_size"],
+        num_layers=h_params["num_layers"],
+        num_classes=h_params["num_classes"],
         device=device,
     )
-    model.load_state_dict(torch.load(model_dir / "best_model.pth", map_location=device))
+    model.load_state_dict(torch.load(model_dir / "model.pth", map_location=device))
     model.eval()
     return model
 
@@ -38,9 +31,11 @@ def get_test_files():
     return list(Path("data/test").glob("*.mid"))
 
 
-def accuracy_loss_plot(
-    save_dir: Path, filename: str, val_acc, val_loss, train_acc, train_loss
-):
+def accuracy_loss_plot(save_dir: Path, filename: str, results: dict):
+    val_acc = results["fold_0"]["val_acc"]
+    val_loss = results["fold_0"]["val_loss"]
+    train_acc = results["fold_0"]["train_acc"]
+    train_loss = results["fold_0"]["train_loss"]
     fig, ax = plt.subplots(ncols=2, nrows=1, figsize=(12, 6))
     ax[0].plot(val_acc, label="Validation accuracy")
     ax[0].plot(train_acc, label="Train accuracy")
@@ -72,110 +67,6 @@ def evaluate_model(model, test_loader, device):
     return y_true, y_pred
 
 
-def grid_search_scatter(grid_params):
-    """
-    x-axis: accuracy
-    y-axis: loss
-    label: hyper parameters
-    "grid_params": [
-        {
-            "params": {
-                "hidden_size": 32,
-                "num_layers": 1,
-                "batch_size": 32,
-                "window_size": 16
-            },
-            "results": {
-                "val_loss": [
-                    0.20729194543327614,
-                    ...
-                    0.19080950682529232
-                ],
-                "val_acc": [
-                    0.9199026869936201,
-                    ...
-                    0.9284903518728718
-                ]
-            }
-        },
-    """
-    fig, ax = plt.subplots()
-    for params in grid_params:
-        val_acc = params["results"]["val_acc"]
-        val_loss = params["results"]["val_loss"]
-        ax.scatter(val_acc, val_loss, label=params["params"])
-    ax.set_xlabel("Accuracy")
-    ax.set_ylabel("Loss")
-    ax.legend()
-    plt.show()
-
-
-def plot_hparams2(grid_params):
-    """How does the accuracy with the 4 hyperparameters; hidden_size, num_layers, batch_size, window_size"""
-    fig, ax = plt.subplots(ncols=2, nrows=2, figsize=(12, 12))
-    from collections import defaultdict
-
-    # list of tuples
-    d = {
-        "hidden": [],
-        "num_layers": [],
-        "batch_size": [],
-        "window_size": [],
-    }
-    for params in grid_params:
-        results = params["results"]
-        params = params["params"]
-        val_acc = results["val_acc"][-1]
-        d["hidden"].append((params["hidden_size"], val_acc))
-        d["num_layers"].append((params["num_layers"], val_acc))
-        d["batch_size"].append((params["batch_size"], val_acc))
-        d["window_size"].append((params["window_size"], val_acc))
-
-    for i, (k, v) in enumerate(d.items()):
-        ax[i // 2, i % 2].scatter(*zip(*v))
-        ax[i // 2, i % 2].set_xlabel(k)
-        ax[i // 2, i % 2].set_ylabel("Validation Accuracy")
-
-    plt.title("Hyperparameters vs Validation Accuracy")
-    plt.show()
-
-
-def plot_hparams(grid_params):
-    """How does the accuracy with the 4 hyperparameters; hidden_size, num_layers, batch_size, window_size"""
-    fig, ax = plt.subplots(figsize=(12, 12))
-    from collections import defaultdict
-
-    # list of tuples
-    d = {
-        "hidden": defaultdict(list),
-        "num_layers": defaultdict(list),
-        "batch_size": defaultdict(list),
-        "window_size": defaultdict(list),
-    }
-    for params in grid_params:
-        results = params["results"]
-        params = params["params"]
-        val_acc = results["val_acc"][-1]
-        d["hidden"][params["hidden_size"]].append(val_acc)
-        d["num_layers"][params["num_layers"]].append(val_acc)
-        d["batch_size"][params["batch_size"]].append(val_acc)
-        d["window_size"][params["window_size"]].append(val_acc)
-
-    # plot the average val accuracy for each hyperparameter on the same graph
-    def min_max_scale(l: list):
-        return [(i - min(l)) / (max(l) - min(l)) for i in l]
-
-    for key, values in d.items():
-        ax.scatter(
-            min_max_scale(list(values.keys())),
-            [v for v in values.values()],
-            label=f"{key}-{[v for v in values.keys()]}",
-        )
-    ax.legend()
-    plt.title("Hyperparameters vs Validation Accuracy")
-    plt.show()
-
-
 def to_onnx(model_dir, filename, window_size, input_size, **h_params):
     # convert to onnx
     model = get_model(model_dir, h_params, "cpu")
@@ -186,18 +77,12 @@ def to_onnx(model_dir, filename, window_size, input_size, **h_params):
 
 def get_test_acc(model, h_params):
     test_paths = get_test_files()
-    test_windows, train_labels = U.extract_windows_from_files(
-        test_paths,
-        window_size=h_params["window_size"],
-        step_size=1,
-        preprocess_func=eval(h_params["preprocessing_func"]),
-    )
-
-    test_dataset = U.MidiDataset(test_windows, train_labels)
-    test_loader = DataLoader(
-        test_dataset, batch_size=h_params["batch_size"], shuffle=False
-    )
-    y_true, y_pred = evaluate_model(model, test_loader, device)
+    y_true, y_pred = [], []
+    for mid_path in test_paths:
+        events, y_true, y_pred = eval(h_params["inference_func"])(
+            mid_path, model, h_params["window_size"], h_params["device"]
+        )
+        print(f"accuracy: {U.accuracy(y_true, y_pred)}")
     print(classification_report(y_true, y_pred))
 
 
@@ -274,34 +159,32 @@ if __name__ == "__main__":
     with open(model_dir / "results.json", "r") as f:
         results = json.load(f)
     h_params = results["h_params"]
+
+    video = False
+    to_onnex = False
+    inference_acc = False
+    train_stats = True
+
     device = U.get_device()
     h_params["device"] = str(device)
 
-    model = get_model(model_dir, h_params, device)
-
+    model = get_model(model_dir, h_params, device).to(device)
     test_paths = get_test_files()
-    generate_videos(
-        mid_path=test_paths[0],
-        model_dir=model_dir,
-        model=model,
-        **h_params,
-    )
 
-    # to_onnx(model_dir, "model.onnx", **h_params)
+    if video:
+        generate_videos(
+            mid_path=test_paths[0],
+            model_dir=model_dir,
+            model=model,
+            **h_params,
+        )
 
-    # analysis of the training process with the results.json file
-    # get the best model training results
-    # grid_params: list[dict[str, dict[str, int]]] = results["grid_params"]
-    # grid_search_scatter(grid_params)
+    if inference_acc:
+        get_test_acc(model, h_params)
 
-    # plot_hparams2(grid_params)
+    if to_onnex:
+        to_onnx(model_dir, "model.onnx", **h_params)
 
     # plot the accuracy and loss of the best model
-    # accuracy_loss_plot(
-    #     model_dir,
-    #     "best_model_training.png",
-    #     results["val_acc"],
-    #     results["val_loss"],
-    #     results["train_acc"],
-    #     results["train_loss"],
-    # )
+    if train_stats:
+        accuracy_loss_plot(model_dir, "best_model_training.png", results)
