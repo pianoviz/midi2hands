@@ -1,5 +1,6 @@
 from models.lstm import LSTMModel
 from typing import Callable
+import pandas as pd
 from sklearn.metrics import classification_report
 import matplotlib.pyplot as plt
 import torch
@@ -25,11 +26,11 @@ def get_test_files():
     return list(Path("data/test").glob("*.mid"))
 
 
-def accuracy_loss_plot(save_dir: Path, filename: str, results: dict):
-    val_acc = results["fold_0"]["val_acc"]
-    val_loss = results["fold_0"]["val_loss"]
-    train_acc = results["fold_0"]["train_acc"]
-    train_loss = results["fold_0"]["train_loss"]
+def accuracy_loss_plot(save_dir: Path, filename: str, results: dict, fold=0):
+    val_acc = results[f"fold_{fold}"]["val_acc"]
+    val_loss = results[f"fold_{fold}"]["val_loss"]
+    train_acc = results[f"fold_{fold}"]["train_acc"]
+    train_loss = results[f"fold_{fold}"]["train_loss"]
     fig, ax = plt.subplots(ncols=2, nrows=1, figsize=(12, 6))
     ax[0].plot(val_acc, label="Validation accuracy")
     ax[0].plot(train_acc, label="Train accuracy")
@@ -44,21 +45,6 @@ def accuracy_loss_plot(save_dir: Path, filename: str, results: dict):
     plt.show()
     # save fig
     fig.savefig(save_dir / filename)
-
-
-def evaluate_model(model, test_loader, device):
-    criterion = nn.BCELoss()
-    model.to(device)
-
-    model.eval()
-    test_losses, test_accs = [], []
-    y_true, y_pred = [], []
-    with torch.no_grad():
-        for windows, labels in test_loader:
-            loss, y_t, y_p = U.process_batch(windows, labels, model, criterion, device)
-            y_true.extend(y_t)
-            y_pred.extend(y_p)
-    return y_true, y_pred
 
 
 def to_onnx(model_dir, filename, window_size, input_size, **h_params):
@@ -78,6 +64,41 @@ def get_test_acc(model, h_params):
         )
         print(f"accuracy: {U.accuracy(y_true, y_pred)}")
     print(classification_report(y_true, y_pred))
+
+
+def get_k_fold_results(model_dir, results):
+    # get the results of the k-fold
+
+    with open(model_dir / "results.json", "r") as f:
+        results = json.load(f)
+    # create a pandas dataframe with the results
+    data = {
+        "fold": [],
+        "train_acc": [],
+        "train_loss": [],
+        "val_acc": [],
+        "val_loss": [],
+        "generative_acc_mean": [],
+        "generative_acc_std": [],
+    }
+    fold_keys = [key for key in results.keys() if "fold" in key]
+    for fold in fold_keys:
+        data["fold"].append(fold)
+        data["train_acc"].append(np.max(results[fold]["train_acc"]))
+        data["train_loss"].append(np.min(results[fold]["train_loss"]))
+        data["val_acc"].append(np.max(results[fold]["val_acc"]))
+        data["val_loss"].append(np.min(results[fold]["val_loss"]))
+        data["generative_acc_mean"].append(
+            np.mean(results[fold]["generative_accuracy"])
+        )
+        data["generative_acc_std"].append(np.std(results[fold]["generative_accuracy"]))
+
+    df = pd.DataFrame(data)
+
+    # print the results
+    print(df)
+    # print a latex table of the results, use 4 decimal places
+    print(df.to_latex(float_format="%.4f"))
 
 
 def generate_videos(mid_path: Path, model_dir: Path, model, **h_params):
@@ -154,10 +175,11 @@ if __name__ == "__main__":
         results = json.load(f)
     h_params = results["h_params"]
 
-    video = True
+    video = False
     to_onnex = False
     inference_acc = False
     train_stats = False
+    k_fold_results = True
 
     device = U.get_device()
     h_params["device"] = str(device)
@@ -172,13 +194,11 @@ if __name__ == "__main__":
             model=model,
             **h_params,
         )
-
     if inference_acc:
         get_test_acc(model, h_params)
-
     if to_onnex:
         to_onnx(model_dir, "model.onnx", **h_params)
-
-    # plot the accuracy and loss of the best model
     if train_stats:
-        accuracy_loss_plot(model_dir, "best_model_training.png", results)
+        accuracy_loss_plot(model_dir, "training.png", results, fold=0)
+    if k_fold_results:
+        get_k_fold_results(model_dir, results)

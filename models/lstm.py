@@ -11,7 +11,12 @@ class LSTMModel(nn.Module):
         self.num_layers = num_layers
         self.device = device
         self.lstm = nn.LSTM(
-            input_size, hidden_size, num_layers, batch_first=True, bidirectional=True
+            input_size,
+            hidden_size,
+            num_layers,
+            batch_first=True,
+            bidirectional=True,
+            dropout=extra_params["dropout"],
         )
         self.fc = nn.Linear(hidden_size * 2, 10)
         self.fc2 = nn.Linear(10, num_classes)
