@@ -1,0 +1,40 @@
+[build-system]
+requires = ["setuptools", "setuptools-scm"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "midi2hands"
+version = "0.1.0"
+dependencies = [
+    "midiutils @ git+ssh://git@github.com/pianoviz/midiutils.git",
+    "numpy==1.26.4",
+    "onnxruntime",
+]
+
+[project.optional-dependencies]
+train = [
+    "torch",
+    "joblib==1.4.2",
+    "matplotlib==3.9.0",
+    "scikit-learn==1.5.0",
+    "pandas",
+    "tqdm==4.66.4",
+]
+
+[tool.ruff]
+select = [
+    "E", # errors
+    "F", # pyflakes
+    "B", # flake8-bugbear
+    "I", # imports
+    "N", # names
+    # "D", # docstrings
+]
+line-length = 150
+indent-width = 2
+
+[tool.pyright]
+venv = ".venv"
+venvPath = "."
+typeCheckingMode = "strict"
+reportMissingTypeStubs = false
