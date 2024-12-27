@@ -15,20 +15,15 @@ memory = Memory(location="cache", verbose=0)
 
 class HandModel(ABC):
   @abstractmethod
-  def __init__(self, window_size: int): ...
-
-  @abstractmethod
   def __call__(self, x: NDArray[np.float32]) -> list[float]: ...
 
   @property
   @abstractmethod
   def model(self) -> Any: ...
 
+  @property
   @abstractmethod
-  def load_model(self, model_path: Path, device: Literal["cpu", "gpu", "mps"]) -> None: ...
-
-  @abstractmethod
-  def save_model(self, model_path: Path) -> None: ...
+  def window_size(self) -> int: ...
 
 
 class HandFormer(ABC):

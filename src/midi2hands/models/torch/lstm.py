@@ -14,6 +14,10 @@ class LSTMModel(TorchModel):
   def model(self) -> torch.nn.Module:
     return self._model
 
+  @property
+  def window_size(self) -> int:
+    return self.config.window_size
+
 
 class LSTMModule(nn.Module):
   def __init__(

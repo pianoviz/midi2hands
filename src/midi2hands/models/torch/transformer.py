@@ -17,6 +17,10 @@ class TransformerModel(TorchModel):
   def model(self) -> torch.nn.Module:
     return self._model
 
+  @property
+  def window_size(self) -> int:
+    return self.config.window_size
+
 
 class TransformerModule(nn.Module):
   def __init__(

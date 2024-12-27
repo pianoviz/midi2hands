@@ -19,6 +19,7 @@ train = [
     "scikit-learn==1.5.0",
     "pandas",
     "tqdm==4.66.4",
+    "onnx",
 ]
 
 [tool.ruff]
