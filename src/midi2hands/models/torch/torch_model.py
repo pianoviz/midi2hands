@@ -5,13 +5,13 @@ import numpy as np
 import torch
 from numpy.typing import NDArray
 
-from midi2hands.config import Config
+from midi2hands.config import BaseConfig
 from midi2hands.models.interface import HandModel
 
 
 class TorchModel(HandModel):
   _model: torch.nn.Module
-  config: Config
+  config: BaseConfig
 
   def __call__(self, x: NDArray[np.float32]) -> list[float]:
     """Calculate"""

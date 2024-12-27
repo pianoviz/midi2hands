@@ -1,17 +1,15 @@
 import torch
 from torch import nn
 
-from midi2hands.config import Config
+from midi2hands.config import TransformerConfig
 from midi2hands.models.torch.torch_model import TorchModel
 
 
 class TransformerModel(TorchModel):
-  def __init__(self, config: Config):
+  def __init__(self, config: TransformerConfig):
     pass
     self.config = config
-    self._model = TransformerModule(
-      input_size=config.input_size, hidden_size=config.hidden_size, num_layers=config.num_layers, dropout=config.dropout
-    ).to(config.device)
+    self._model = TransformerModule(config).to(config.device)
 
   @property
   def model(self) -> torch.nn.Module:
@@ -23,27 +21,19 @@ class TransformerModel(TorchModel):
 
 
 class TransformerModule(nn.Module):
-  def __init__(
-    self,
-    input_size: int = 4,
-    hidden_size: int = 32,
-    num_heads: int = 16,
-    num_layers: int = 2,
-    dim_feedforward: int = 64,
-    dropout: float = 0.1,
-  ):
+  def __init__(self, config: TransformerConfig):
     super(TransformerModule, self).__init__()  # type: ignore
-    self.embedding = nn.Linear(input_size, hidden_size)
+    self.embedding = nn.Linear(config.input_size, config.hidden_size)
     self.transformer = nn.Transformer(
-      d_model=hidden_size,
-      nhead=num_heads,
-      num_encoder_layers=num_layers,
-      num_decoder_layers=num_layers,
-      dim_feedforward=dim_feedforward,
-      dropout=dropout,
+      d_model=config.hidden_size,
+      nhead=config.num_heads,
+      num_encoder_layers=config.num_layers,
+      num_decoder_layers=config.num_layers,
+      dim_feedforward=config.dim_feedforward,
+      dropout=config.dropout,
       batch_first=True,
     )
-    self.fc_out = nn.Linear(hidden_size, 1)  # Output layer with one unit for binary classification
+    self.fc_out = nn.Linear(config.hidden_size, 1)  # Output layer with one unit for binary classification
 
   def forward(self, src: torch.Tensor):
     src = self.embedding(src)  # Embed the source sequence

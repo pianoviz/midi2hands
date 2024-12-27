@@ -1,14 +1,12 @@
 from abc import ABC, abstractmethod
 from pathlib import Path
-from typing import Any, Literal, Tuple
+from typing import Any, Tuple
 
 import numpy as np
 from joblib import Memory
 from midiutils.midi_preprocessor import MidiPreprocessor
 from midiutils.types import NoteEvent
 from numpy.typing import NDArray
-
-from midi2hands.config import Config
 
 memory = Memory(location="cache", verbose=0)
 
@@ -32,14 +30,6 @@ class HandFormer(ABC):
   There are two main ways to preprocess the data, generative and discriminatory.
   The windowing is different in the two methods.
   """
-
-  @abstractmethod
-  def __init__(
-    self,
-    model_type: Literal["transformer", "lstm"],
-    config: Config,
-    use_onnx: bool = True,
-  ): ...
 
   def convert_hand_to_number(self, hand: str | None):
     return 0 if hand == "left" else (1 if hand == "right" else -1)

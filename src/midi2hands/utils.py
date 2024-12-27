@@ -13,7 +13,7 @@ from numpy._typing import NDArray
 from torch.optim import Optimizer
 from torch.utils.data import DataLoader, Dataset
 
-from midi2hands.config import Config
+from midi2hands.config import TrainingConfig
 
 torch.manual_seed(0)  # type: ignore
 
@@ -141,7 +141,7 @@ def train_loop(
   optimizer: Optimizer,
   criterion: torch.nn.Module,
   logger: logging.Logger,
-  config: Config,
+  config: TrainingConfig,
 ):
   # Store metrics for all epochs
   metrics: dict[str, list[float]] = {
