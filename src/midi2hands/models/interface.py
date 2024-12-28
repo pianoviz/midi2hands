@@ -59,7 +59,7 @@ class HandFormer(ABC):
     all_labels: list[NDArray[np.float32]] = []
     mp = MidiPreprocessor()
     for path in paths:
-      events = mp.get_midi_events(path, max_note_length=100)
+      events = mp.get_midi_events(path)
       windows, labels = self.extract_windows(events, window_size)
       all_windows.extend(windows)
       all_labels.extend(labels)

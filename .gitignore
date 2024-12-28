@@ -13,3 +13,4 @@ workdir
 nohup.out
 weights
 *.egg-info
+runs

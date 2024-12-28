@@ -2,7 +2,7 @@ import copy
 import logging
 import random
 from pathlib import Path
-from typing import Any, Literal, Tuple
+from typing import Any, Tuple
 
 import numpy as np
 import torch
@@ -12,6 +12,7 @@ from numpy._typing import NDArray
 # from mido.midifiles.midifiles import MidiFile
 from torch.optim import Optimizer
 from torch.utils.data import DataLoader, Dataset
+from tqdm import tqdm
 
 from midi2hands.config import TrainingConfig
 
@@ -31,10 +32,6 @@ class MidiDataset(Dataset[Any]):
 
   def __getitem__(self, idx: int):
     return self.windows[idx], self.labels[idx]
-
-
-def get_device() -> Literal["cpu", "cuda", "mps"]:
-  return "cuda" if torch.cuda.is_available() else ("mps" if torch.backends.mps.is_available() else "cpu")
 
 
 def convert_hand_to_number(hand: str | None):
@@ -94,7 +91,7 @@ def generate_complex_random_name():
 
 
 def k_fold_split(k: int) -> list[Tuple[list[Path], list[Path]]]:
-  paths = list(Path("data/train").rglob("*.mid"))
+  paths: list[Path] = list(Path("data/train").rglob("*.mid"))
   n = len(paths)
   fold_size = n // k
   folds: list[Tuple[list[Path], list[Path]]] = []
@@ -112,12 +109,12 @@ def process_batch(
   labels: torch.Tensor,
   model: torch.nn.Module,
   criterion: torch.nn.Module,
+  logger: logging.Logger,
   device: str,
 ) -> tuple[torch.nn.Module, list[int], list[int]]:
   windows = windows.to(device)
   labels = labels.float().to(device)
   outputs = model(windows)
-
   loss = criterion(outputs, labels)
 
   # Simplify handling of batches with single sample
@@ -165,13 +162,16 @@ def train_loop(
     model.train()
     train_losses: list[float] = []
     train_accs: list[float] = []
-    for windows, labels in train_loader:
-      loss, y_t, y_p = process_batch(windows, labels, model, criterion, config.device)
+    for i, (windows, labels) in enumerate(tqdm(train_loader)):
+      loss, y_t, y_p = process_batch(windows, labels, model, criterion, logger, config.device.value)
       train_losses.append(loss.item())
       train_accs.append(accuracy(y_t, y_p))
       optimizer.zero_grad()
       loss.backward()
       optimizer.step()
+
+      if i % 100 == 0:
+        logger.info(loss)
 
     # Logging training metrics
     metrics["train_loss"].append(float(np.mean(train_losses)))
@@ -183,7 +183,7 @@ def train_loop(
     val_accs: list[float] = []
     with torch.no_grad():
       for windows, labels in val_loader:
-        loss, y_t, y_p = process_batch(windows, labels, model, criterion, config.device)
+        loss, y_t, y_p = process_batch(windows, labels, model, criterion, logger, config.device.value)
         val_losses.append(loss.item())
         val_accs.append(accuracy(y_t, y_p))
 

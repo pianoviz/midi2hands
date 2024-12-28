@@ -30,9 +30,6 @@ class GenerativeHandFormer(HandFormer):
       label = self.convert_hand_to_number(label)
       y_true.append(label)
 
-      # tensor_window = (
-      #   torch.tensor(preprocessed_window).float().to(device).unsqueeze(0)
-      # )
       output = self.model(preprocessed_window)
       output = float(output[0])
       output = 0 if output < 0.5 else 1

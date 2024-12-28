@@ -6,8 +6,6 @@ import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
 
-import midi2hands.utils as utils
-
 # def get_model(model_dir, h_params, device):
 #   """Try to read the model from the state_dict file"""
 
@@ -123,8 +121,8 @@ if __name__ == "__main__":
   train_stats = False
   k_fold_results = False
 
-  device = utils.get_device()
-  h_params["device"] = str(device)
+  # device = utils.get_device()
+  # h_params["device"] = str(device)
 
   # model = get_mdel(model_dir, h_params, device).to(device)
   test_paths = get_test_files()

@@ -10,7 +10,7 @@ from torch.utils.data import DataLoader
 from tqdm import tqdm
 
 import midi2hands.utils as utils
-from midi2hands.spec import GenerativeTransformer, ModelSpec
+from midi2hands.spec import GenerativeLSTM, ModelSpec
 
 
 def main(model_spec: ModelSpec):
@@ -24,7 +24,7 @@ def main(model_spec: ModelSpec):
   # unpacking spec
   config = model_spec.config
   train_config = model_spec.train_config
-  model = model_spec.model.model
+  model = model_spec.model
   handformer = model_spec.handformer
 
   torch.manual_seed(train_config.seed)  # type: ignore
@@ -52,9 +52,9 @@ def main(model_spec: ModelSpec):
     val_loader: DataLoader[Any] = DataLoader(val_dataset, batch_size=train_config.batch_size, shuffle=False)
 
     criterion: nn.Module = nn.BCELoss()
-    optimizer = torch.optim.Adam(model.model.parameters(), lr=0.001)
+    optimizer = torch.optim.Adam(model.parameters(), lr=0.001)
     results = utils.train_loop(
-      model=model.model,
+      model=model,
       train_loader=train_loader,
       val_loader=val_loader,
       optimizer=optimizer,
@@ -72,7 +72,7 @@ def main(model_spec: ModelSpec):
         _, y_t, y_p = handformer.inference(
           events=MidiPreprocessor().get_midi_events(Path(val_path), max_note_length=100),
           window_size=config.window_size,
-          device=config.device,
+          device=config.device.value,
         )
         y_true.extend(y_t)
         y_pred.extend(y_p)
@@ -97,5 +97,5 @@ def main(model_spec: ModelSpec):
 
 
 if __name__ == "__main__":
-  model_spec = GenerativeTransformer()
+  model_spec = GenerativeLSTM()
   main(model_spec=model_spec)

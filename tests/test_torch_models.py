@@ -3,7 +3,7 @@ from pathlib import Path
 
 import numpy as np
 
-from midi2hands.config import LSTMConfig, TransformerConfig
+from midi2hands.config import Device, LSTMConfig, TransformerConfig
 from midi2hands.models.torch.lstm import LSTMModel
 from midi2hands.models.torch.transformer import TransformerModel
 
@@ -11,11 +11,11 @@ from midi2hands.models.torch.transformer import TransformerModel
 class TestTorchModels(unittest.TestCase):
   def setUp(self):
     # self.config = Config(model="lstm")
-    self.lstm_config = LSTMConfig(device="mps", input_size=3)
+    self.lstm_config = LSTMConfig(device=Device.MPS, input_size=3)
     self.lstm_model = LSTMModel(config=self.lstm_config)
 
     self.transformer_config = TransformerConfig(
-      device="mps",
+      device=Device.MPS,
       input_size=4,
       hidden_size=32,
       num_layers=2,

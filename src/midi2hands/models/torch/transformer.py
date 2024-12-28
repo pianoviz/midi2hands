@@ -9,7 +9,7 @@ class TransformerModel(TorchModel):
   def __init__(self, config: TransformerConfig):
     pass
     self.config = config
-    self._model = TransformerModule(config).to(config.device)
+    self._model = TransformerModule(config).to(config.device.value)
 
   @property
   def model(self) -> torch.nn.Module:
