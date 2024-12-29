@@ -1,3 +1,4 @@
+import os
 from pathlib import Path
 from typing import Any
 
@@ -7,9 +8,11 @@ from numpy.typing import NDArray
 
 from midi2hands.models.interface import HandModel
 
+default_path = Path(os.path.join(os.path.dirname(__file__), "model.onnx"))
+
 
 class ONNXModel(HandModel):
-  def __init__(self, onnx_path: Path):
+  def __init__(self, onnx_path: Path = default_path):
     self.session = ort.InferenceSession(str(onnx_path))
     # You might need to figure out input/output names for your ONNX graph
     self.input_name: str = self.session.get_inputs()[0].name  # type: ignore

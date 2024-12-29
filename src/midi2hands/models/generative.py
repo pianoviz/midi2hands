@@ -30,7 +30,7 @@ class GenerativeHandFormer(HandFormer):
       label = self.convert_hand_to_number(label)
       y_true.append(label)
 
-      output = self.model(preprocessed_window)
+      output = self.model(np.expand_dims(preprocessed_window, axis=0))
       output = float(output[0])
       output = 0 if output < 0.5 else 1
       y_pred.append(output)

@@ -53,6 +53,7 @@ class TrainingConfig:
     use_kfold: bool = False,
     n_folds: int = 10,
     device: Device = Device.CPU,
+    inference_eval: bool = True,
   ) -> None:
     self.batch_size = batch_size
     self.num_epochs = num_epochs
@@ -62,6 +63,7 @@ class TrainingConfig:
     self.use_kfold = use_kfold
     self.n_folds = n_folds
     self.device = device
+    self.inference_eval = inference_eval
 
   def to_dict(self) -> Dict[str, Any]:
     return vars(self)

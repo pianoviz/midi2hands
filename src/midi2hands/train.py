@@ -10,10 +10,14 @@ from torch.utils.data import DataLoader
 from tqdm import tqdm
 
 import midi2hands.utils as utils
-from midi2hands.spec import GenerativeLSTM, ModelSpec
+from midi2hands.config import Device, LSTMConfig, TrainingConfig
+from midi2hands.models.generative import GenerativeHandFormer
+from midi2hands.models.interface import HandFormer
+from midi2hands.models.torch.lstm import LSTMModel
+from midi2hands.models.torch.torch_model import TorchModel
 
 
-def main(model_spec: ModelSpec):
+def main(handformer: HandFormer, model: TorchModel, train_config: TrainingConfig):
   run_name = utils.generate_complex_random_name()
   run_path = Path(os.getcwd()) / "runs" / Path(run_name)
   if not run_path.exists():
@@ -21,12 +25,7 @@ def main(model_spec: ModelSpec):
   print(f"Run name: {run_name}")
   logger = utils.setup_logger(__name__, str(run_path), "log")
 
-  # unpacking spec
-  config = model_spec.config
-  train_config = model_spec.train_config
-  model = model_spec.model
-  handformer = model_spec.handformer
-
+  config = model.config
   torch.manual_seed(train_config.seed)  # type: ignore
 
   k_fold_data = utils.k_fold_split(train_config.n_folds)
@@ -52,9 +51,9 @@ def main(model_spec: ModelSpec):
     val_loader: DataLoader[Any] = DataLoader(val_dataset, batch_size=train_config.batch_size, shuffle=False)
 
     criterion: nn.Module = nn.BCELoss()
-    optimizer = torch.optim.Adam(model.parameters(), lr=0.001)
+    optimizer = torch.optim.Adam(model.model.parameters(), lr=0.001)
     results = utils.train_loop(
-      model=model,
+      model=model.model,
       train_loader=train_loader,
       val_loader=val_loader,
       optimizer=optimizer,
@@ -63,32 +62,34 @@ def main(model_spec: ModelSpec):
       config=train_config,
     )
     all_results[f"fold_{i}"] = results
-    group_accuracies: list[float] = []
-    y_true: list[int] = []
-    y_pred: list[int] = []
-    model.model.eval()
-    with torch.no_grad():
-      for val_path in train_paths:
-        _, y_t, y_p = handformer.inference(
-          events=MidiPreprocessor().get_midi_events(Path(val_path), max_note_length=100),
-          window_size=config.window_size,
-          device=config.device.value,
-        )
-        y_true.extend(y_t)
-        y_pred.extend(y_p)
+    if train_config.inference_eval:
+      group_accuracies: list[float] = []
+      y_true: list[int] = []
+      y_pred: list[int] = []
+      model.model.eval()
+      with torch.no_grad():
+        for val_path in train_paths:
+          _, y_t, y_p = handformer.inference(
+            events=MidiPreprocessor().get_midi_events(Path(val_path), max_note_length=100),
+            window_size=config.window_size,
+            device=config.device.value,
+          )
+          y_true.extend(y_t)
+          y_pred.extend(y_p)
 
-        acc = utils.accuracy(y_t, y_p)
-        group_accuracies.append(acc)
+          acc = utils.accuracy(y_t, y_p)
+          group_accuracies.append(acc)
 
-    group_accuracy = sum(group_accuracies) / len(group_accuracies)
-    inference_accuracy = utils.accuracy(y_true, y_pred)
-    all_results[f"fold_{i}"]["group_accuracy"] = group_accuracy
-    all_results[f"fold_{i}"]["inference_accuracy"] = inference_accuracy
+      group_accuracy = sum(group_accuracies) / len(group_accuracies)
+      inference_accuracy = utils.accuracy(y_true, y_pred)
+      all_results[f"fold_{i}"]["group_accuracy"] = group_accuracy
+      all_results[f"fold_{i}"]["inference_accuracy"] = inference_accuracy
 
-    logger.info(f"Inference group accuracy mean: {group_accuracy}")
-    logger.info(f"Inference mean: {inference_accuracy}")
+      logger.info(f"Inference group accuracy mean: {group_accuracy}")
+      logger.info(f"Inference mean: {inference_accuracy}")
 
     torch.save(model.model.state_dict(), run_path / "model.pth")  # type: ignore
+    model.to_onnx(run_path / "model.onnx")
     if not train_config.use_kfold:
       break
 
@@ -97,5 +98,11 @@ def main(model_spec: ModelSpec):
 
 
 if __name__ == "__main__":
-  model_spec = GenerativeLSTM()
-  main(model_spec=model_spec)
+  config = LSTMConfig(device=Device.MPS)
+  model = LSTMModel(config)
+  handformer = GenerativeHandFormer(model)
+  train_config = TrainingConfig(
+    batch_size=64, num_epochs=4, patience=3, device=Device.MPS, use_kfold=False, use_early_stopping=False, inference_eval=False
+  )
+
+  main(handformer=handformer, model=model, train_config=train_config)

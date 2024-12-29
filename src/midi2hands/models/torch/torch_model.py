@@ -37,6 +37,6 @@ class TorchModel(HandModel):
     torch.onnx.export(  # type: ignore
       self._model,
       (torch.randn(1, self.config.window_size, self.config.input_size).to(self.config.device.value),),
-      Path(output_path) / "model.onnx",
+      output_path,
     )
     print(f"Model successfully exported to ONNX format at {output_path}")
