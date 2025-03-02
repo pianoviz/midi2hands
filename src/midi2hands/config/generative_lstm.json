@@ -1,4 +1,6 @@
 {
+  "model_type": "generative",
+  "model": "lstm",
   "seed": 42,
   "batch_size": 64,
   "num_epochs": 2,
@@ -11,8 +13,5 @@
   "n_folds": 10,
   "use_early_stopping": true,
   "patience": 5,
-  "preprocessing_func": "U.extract_windows_generative",
-  "inference_func": "U.generative_inference",
-  "model_func": "U.lstm_model",
-  "use_kfold": false
+  "use_kfold": true
 }
