@@ -83,7 +83,7 @@ class LSTMConfig(BaseConfig):
   def __init__(
     self,
     device: Device = Device.CPU,
-    window_size: int = 30,
+    window_size: int = 64,
     input_size: int = 4,
     hidden_size: int = 32,
     dropout: float = 0.1,

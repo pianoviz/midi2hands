@@ -162,16 +162,13 @@ def train_loop(
     model.train()
     train_losses: list[float] = []
     train_accs: list[float] = []
-    for i, (windows, labels) in enumerate(tqdm(train_loader)):
+    for windows, labels in tqdm(train_loader):
       loss, y_t, y_p = process_batch(windows, labels, model, criterion, logger, config.device.value)
       train_losses.append(loss.item())
       train_accs.append(accuracy(y_t, y_p))
       optimizer.zero_grad()
       loss.backward()
       optimizer.step()
-
-      if i % 100 == 0:
-        logger.info(loss)
 
     # Logging training metrics
     metrics["train_loss"].append(float(np.mean(train_losses)))

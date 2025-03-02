@@ -102,7 +102,7 @@ if __name__ == "__main__":
   model = LSTMModel(config)
   handformer = GenerativeHandFormer(model)
   train_config = TrainingConfig(
-    batch_size=64, num_epochs=4, patience=3, device=Device.MPS, use_kfold=False, use_early_stopping=False, inference_eval=False
+    batch_size=64, num_epochs=20, patience=3, device=Device.MPS, use_kfold=False, use_early_stopping=True, inference_eval=True
   )
 
   main(handformer=handformer, model=model, train_config=train_config)
