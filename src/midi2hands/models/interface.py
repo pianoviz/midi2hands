@@ -3,12 +3,9 @@ from pathlib import Path
 from typing import Any, Tuple
 
 import numpy as np
-from joblib import Memory
 from midiutils.midi_preprocessor import MidiPreprocessor
 from midiutils.types import NoteEvent
 from numpy.typing import NDArray
-
-memory = Memory(location="cache", verbose=0)
 
 
 class HandModel(ABC):
