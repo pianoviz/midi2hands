@@ -6,7 +6,7 @@ build-backend = "setuptools.build_meta"
 name = "midi2hands"
 version = "0.1.0"
 dependencies = [
-    "midiutils @ git+https://github.com/pianoviz/midiutils.git",
+    "midiutils-python",
     "numpy==1.26.4",
     "onnxruntime",
 ]
