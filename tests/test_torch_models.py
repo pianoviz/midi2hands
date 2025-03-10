@@ -34,5 +34,5 @@ class TestTorchModels(unittest.TestCase):
     assert all(isinstance(item, float) for item in ret), "Not all elements in the list are of type 'float'"
 
   def test_to_onnx(self):
-    output_path = Path("/tmp")
+    output_path = Path("/tmp/test.onnx")
     self.lstm_model.to_onnx(output_path=output_path)
