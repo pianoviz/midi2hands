@@ -22,6 +22,9 @@ train = [
     "onnx",
 ]
 
+[project.scripts]
+"midi2hands" = "midi2hands.main:main"
+
 [tool.ruff]
 select = [
     "E", # errors
