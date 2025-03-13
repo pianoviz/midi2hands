@@ -36,7 +36,7 @@ pip install -e .[train]
 
 Here is an example for inference:
 ```bash
-midi2vid -i src/midi2hands/data/test/000-Faure_ClaireDeLune_Op46No2.mid
+midi2hands -i src/midi2hands/data/test/000-Faure_ClaireDeLune_Op46No2.mid
 ```
 
 You can also train new models by running train.py. The models can be configured
