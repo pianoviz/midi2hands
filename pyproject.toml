@@ -4,12 +4,20 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "midi2hands"
-version = "0.1.0"
+description = "Training and inference for midi hand assignment."
+dynamic = ["version"]
+authors = [{name = "Oscar Andersson", email = "oscar.966484@gmail.com"}]
+readme = "README.md"
+license = { file = "LICENSE" }
 dependencies = [
     "midiutils-python",
     "numpy==1.26.4",
     "onnxruntime",
 ]
+[tool.setuptools_scm]
+
+[project.urls]
+"Github" = "https://github.com/pianoviz/midi2hands"
 
 [project.optional-dependencies]
 train = [
