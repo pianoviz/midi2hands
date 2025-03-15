@@ -141,8 +141,6 @@ def train_loop(
   mlflow_run: mlflow.ActiveRun,
 ) -> None:
   num_epochs = config.num_epochs
-  if config.use_early_stopping:
-    num_epochs = 500
 
   best_val_score = 0
   best_model_state = None
@@ -151,7 +149,9 @@ def train_loop(
 
   with mlflow.start_run(run_id=mlflow_run.info.run_id, nested=True):
     global_batch_step = 0
-    for epoch in range(num_epochs):
+    epoch = 1
+    while epoch <= num_epochs or num_epochs < 0:
+      epoch += 1
       model.train()
       train_losses: list[float] = []
       train_accs: list[float] = []
@@ -193,7 +193,7 @@ def train_loop(
       mlflow.log_metric("val_acc", val_acc, step=epoch)
 
       # Early stopping
-      if config.use_early_stopping:
+      if config.num_epochs < 0:
         if val_acc > best_val_score:
           best_val_score = val_acc
           epochs_without_improvement = 0

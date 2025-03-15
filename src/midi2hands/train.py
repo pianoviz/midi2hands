@@ -38,7 +38,6 @@ def main(handformer: HandFormer, model: TorchModel, train_config: TrainingConfig
     mlflow.log_param("patience", train_config.patience)
     mlflow.log_param("device", train_config.device.value)
     mlflow.log_param("use_kfold", train_config.use_kfold)
-    mlflow.log_param("use_early_stopping", train_config.use_early_stopping)
     mlflow.log_param("window_size", config.window_size)
     mlflow.log_param("seed", train_config.seed)
 
@@ -47,8 +46,6 @@ def main(handformer: HandFormer, model: TorchModel, train_config: TrainingConfig
     for i, paths in enumerate(tqdm(k_fold_data, total=len(k_fold_data), unit="fold")):
       # Data preparation
       train_paths, val_paths = paths
-      train_paths = train_paths[:1]
-      val_paths = val_paths[:1]
       train_windows, train_labels = handformer.extract_windows_from_files(train_paths, window_size=config.window_size)
       val_windows, val_labels = handformer.extract_windows_from_files(
         paths=val_paths,
@@ -80,9 +77,10 @@ def main(handformer: HandFormer, model: TorchModel, train_config: TrainingConfig
         group_accuracies: list[float] = []
         y_true: list[int] = []
         y_pred: list[int] = []
+        table_data = {"file_name": [], "inference_accuracy": []}
         model.model.eval()
         with torch.no_grad():
-          for val_path in tqdm(train_paths):
+          for val_path in tqdm(val_paths):
             _, y_t, y_p = handformer.inference(
               events=MidiPreprocessor().get_midi_events(Path(val_path), max_note_length=100),
               window_size=config.window_size,
@@ -92,8 +90,11 @@ def main(handformer: HandFormer, model: TorchModel, train_config: TrainingConfig
             y_pred.extend(y_p)
             acc = utils.accuracy(y_t, y_p)
             group_accuracies.append(acc)
-            safe_path_key = f"fold_{i}_path_{str(val_path).replace('/', '_').replace('.', '_')}_accuracy"
-            mlflow.log_metric(safe_path_key, acc)
+            file_name = str(val_path)  # Convert path to string
+            table_data["file_name"].append(file_name)
+            table_data["inference_accuracy"].append(acc)
+
+        mlflow.log_table(table_data, "validation_accuracies.json")
 
         group_accuracy = sum(group_accuracies) / len(group_accuracies)
         inference_accuracy = utils.accuracy(y_true, y_pred)
@@ -101,8 +102,6 @@ def main(handformer: HandFormer, model: TorchModel, train_config: TrainingConfig
         mlflow.log_metric(f"fold_{i}_group_accuracy", group_accuracy)
         mlflow.log_metric(f"fold_{i}_inference_accuracy", inference_accuracy)
 
-      # Save and log model artifacts
-      # torch.save(model.model.state_dict(), run_path / "model.pth")
       print(model.model)
       input_example = next(iter(train_loader))[0][:1]
       model.model.eval()
@@ -110,8 +109,9 @@ def main(handformer: HandFormer, model: TorchModel, train_config: TrainingConfig
       signature = infer_signature(input_example.cpu().detach().numpy(), output_example.cpu().detach().numpy())
       mlflow.pytorch.log_model(model.model, f"fold_{i}_pytorch_model", signature=signature)
 
-      with tempfile.NamedTemporaryFile() as f:
+      with tempfile.NamedTemporaryFile(prefix="model_", suffix=".onnx") as f:
         model.to_onnx(f.name)
+        mlflow.log_artifact(f.name)
         onnx_model = onnx.load(f.name)
         mlflow.onnx.log_model(onnx_model, f"fold_{i}_onnx_model", signature=signature)
 
@@ -120,11 +120,9 @@ def main(handformer: HandFormer, model: TorchModel, train_config: TrainingConfig
 
 
 if __name__ == "__main__":
-  config = LSTMConfig(device=Device.MPS)
+  config = LSTMConfig(device=Device.CUDA)
   model = LSTMModel(config)
   handformer = GenerativeHandFormer(model)
-  train_config = TrainingConfig(
-    batch_size=64, num_epochs=0, patience=3, device=Device.MPS, use_kfold=False, use_early_stopping=False, inference_eval=False
-  )
+  train_config = TrainingConfig(batch_size=64, num_epochs=-1, patience=5, device=Device.CUDA, use_kfold=False, inference_eval=True)
 
   main(handformer=handformer, model=model, train_config=train_config)

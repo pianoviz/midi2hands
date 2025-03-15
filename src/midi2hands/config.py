@@ -48,7 +48,6 @@ class TrainingConfig:
     batch_size: int = 64,
     num_epochs: int = 2,
     seed: int = 64,
-    use_early_stopping: bool = True,
     patience: int = 5,
     use_kfold: bool = False,
     n_folds: int = 10,
@@ -58,7 +57,6 @@ class TrainingConfig:
     self.batch_size = batch_size
     self.num_epochs = num_epochs
     self.seed = seed
-    self.use_early_stopping = use_early_stopping
     self.patience = patience
     self.use_kfold = use_kfold
     self.n_folds = n_folds
