@@ -28,6 +28,7 @@ train = [
     "pandas",
     "tqdm==4.66.4",
     "onnx",
+    "mlflow",
 ]
 
 [project.scripts]
@@ -45,8 +46,6 @@ select = [
 line-length = 150
 indent-width = 2
 
-[tool.pyright]
-venv = ".venv"
-venvPath = "."
-typeCheckingMode = "strict"
-reportMissingTypeStubs = false
+[tool.mypy]
+strict = true
+ignore_missing_imports = true

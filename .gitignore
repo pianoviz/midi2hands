@@ -15,3 +15,5 @@ weights
 *.egg-info
 runs
 .ipynb_checkpoints
+mlruns
+dist/

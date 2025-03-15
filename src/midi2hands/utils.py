@@ -4,6 +4,7 @@ import random
 from pathlib import Path
 from typing import Any, Tuple
 
+import mlflow
 import numpy as np
 import torch
 from joblib import Memory
@@ -109,7 +110,6 @@ def process_batch(
   labels: torch.Tensor,
   model: torch.nn.Module,
   criterion: torch.nn.Module,
-  logger: logging.Logger,
   device: str,
 ) -> tuple[torch.nn.Module, list[int], list[int]]:
   windows = windows.to(device)
@@ -137,78 +137,76 @@ def train_loop(
   val_loader: DataLoader[Any],
   optimizer: Optimizer,
   criterion: torch.nn.Module,
-  logger: logging.Logger,
   config: TrainingConfig,
-):
-  # Store metrics for all epochs
-  metrics: dict[str, list[float]] = {
-    "train_loss": [],
-    "train_acc": [],
-    "val_loss": [],
-    "val_acc": [],
-  }
-
+  mlflow_run: mlflow.ActiveRun,
+) -> None:
   num_epochs = config.num_epochs
   if config.use_early_stopping:
     num_epochs = 500
 
-  # Function to process batches
-
   best_val_score = 0
   best_model_state = None
   epochs_without_improvement = 0
+  log_batch_interval = 50
 
-  for epoch in range(num_epochs):
-    model.train()
-    train_losses: list[float] = []
-    train_accs: list[float] = []
-    for windows, labels in tqdm(train_loader):
-      loss, y_t, y_p = process_batch(windows, labels, model, criterion, logger, config.device.value)
-      train_losses.append(loss.item())
-      train_accs.append(accuracy(y_t, y_p))
-      optimizer.zero_grad()
-      loss.backward()
-      optimizer.step()
+  with mlflow.start_run(run_id=mlflow_run.info.run_id, nested=True):
+    global_batch_step = 0
+    for epoch in range(num_epochs):
+      model.train()
+      train_losses: list[float] = []
+      train_accs: list[float] = []
+      for batch_idx, (windows, labels) in enumerate(tqdm(train_loader)):
+        loss, y_t, y_p = process_batch(windows, labels, model, criterion, config.device.value)
+        train_losses.append(loss.item())
+        train_accs.append(accuracy(y_t, y_p))
+        # Log loss every log_batch_interval batches
+        if (batch_idx + 1) % log_batch_interval == 0:
+          mlflow.log_metric("train_loss_batch", loss.item(), step=global_batch_step)
 
-    # Logging training metrics
-    metrics["train_loss"].append(float(np.mean(train_losses)))
-    metrics["train_acc"].append(float(np.mean(train_accs)))
+        global_batch_step += 1
+        optimizer.zero_grad()
+        loss.backward()
+        optimizer.step()
 
-    # Validation phase
-    model.eval()
-    val_losses: list[float] = []
-    val_accs: list[float] = []
-    with torch.no_grad():
-      for windows, labels in val_loader:
-        loss, y_t, y_p = process_batch(windows, labels, model, criterion, logger, config.device.value)
-        val_losses.append(loss.item())
-        val_accs.append(accuracy(y_t, y_p))
+      # Calculate and log training metrics
+      train_loss = float(np.mean(train_losses))
+      train_acc = float(np.mean(train_accs))
 
-    # Logging validation metrics
-    metrics["val_loss"].append(float(np.mean(val_losses)))
-    metrics["val_acc"].append(float(np.mean(val_accs)))
+      mlflow.log_metric("train_loss", train_loss, step=epoch)
+      mlflow.log_metric("train_acc", train_acc, step=epoch)
 
-    # Output log for each epoch
-    logger.info(
-      f"Epoch {epoch+1:02}\ttrain_loss: {metrics['train_loss'][-1]:.4f}\t"
-      f"train_acc: {metrics['train_acc'][-1]:.4f}\t"
-      f"val_loss: {metrics['val_loss'][-1]:.4f}\t"
-      f"val_acc: {metrics['val_acc'][-1]:.4f}"
-    )
+      # Validation phase
+      model.eval()
+      val_losses: list[float] = []
+      val_accs: list[float] = []
+      with torch.no_grad():
+        for windows, labels in val_loader:
+          loss, y_t, y_p = process_batch(windows, labels, model, criterion, config.device.value)
+          val_losses.append(loss.item())
+          val_accs.append(accuracy(y_t, y_p))
 
-    # Early stopping
-    if config.use_early_stopping:
-      if metrics["val_acc"][-1] > best_val_score:
-        best_val_score = metrics["val_acc"][-1]
-        epochs_without_improvement = 0
-        best_model_state = copy.deepcopy(model.state_dict())
-      else:
-        epochs_without_improvement += 1
-        if epochs_without_improvement >= config.patience:
-          logger.info(f"Early stopping after {epoch+1} epochs without improvement")
-          break
-      # Load the best model state
-  if best_model_state is not None:
-    logger.info("Loading best model state")
-    model.load_state_dict(best_model_state)
-  return metrics
+      # Calculate and log validation metrics
+      val_loss = float(np.mean(val_losses))
+      val_acc = float(np.mean(val_accs))
+
+      mlflow.log_metric("val_loss", val_loss, step=epoch)
+      mlflow.log_metric("val_acc", val_acc, step=epoch)
+
+      # Early stopping
+      if config.use_early_stopping:
+        if val_acc > best_val_score:
+          best_val_score = val_acc
+          epochs_without_improvement = 0
+          best_model_state = copy.deepcopy(model.state_dict())
+        else:
+          epochs_without_improvement += 1
+          if epochs_without_improvement >= config.patience:
+            print(f"Early stopping after {epoch + 1} epochs without improvement")
+            break
+        # Load the best model state
+    if best_model_state is not None:
+      print("Loading best model state")
+      model.load_state_dict(best_model_state)
+
+    # Log final metrics
+    mlflow.log_metric("best_val_acc", best_val_score)
